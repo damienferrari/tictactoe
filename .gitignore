@@ -15,8 +15,6 @@ build/
 **/ios/Flutter/Flutter.framework/
 **/ios/Flutter/Flutter.podspec
 **/ios/Flutter/ephemeral/
-**/macos/Pods/
-**/macos/Flutter/ephemeral/
 **/xcuserdata/
 *.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist
 
