@@ -2,8 +2,16 @@
 
 A local game against a computer opponent.
 
-<img height="500" alt="On Android: the machine has just won, with the winning row highlighted, and the tally has recorded the loss" src="https://github.com/user-attachments/assets/c45bad48-0daf-45b8-a105-ddb28c6eb054" />
-<img height="500" alt="On iOS: a fresh board, with the tally persisted across earlier sessions" src="https://github.com/user-attachments/assets/390d1618-dabd-4bac-9c41-b5183eb380dc" />
+<table>
+  <tr>
+    <td><img height="500" alt="On Android: the machine has just won, with the winning row highlighted, and the tally has recorded the loss" src="https://github.com/user-attachments/assets/c45bad48-0daf-45b8-a105-ddb28c6eb054" /></td>
+    <td><img height="500" alt="On iOS: a fresh board, with the tally persisted across earlier sessions" src="https://github.com/user-attachments/assets/390d1618-dabd-4bac-9c41-b5183eb380dc" /></td>
+  </tr>
+  <tr>
+    <td align="center"><sub><b>Android</b></sub></td>
+    <td align="center"><sub><b>iOS</b></sub></td>
+  </tr>
+</table>
 
 **The game is the pretext.** Nine cells and a solved game are not an engineering problem.
 What this repository is about is two things, and it is worth stating them before any code:
