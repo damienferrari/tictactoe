@@ -16,6 +16,11 @@ What this repository is about is two things, and it is worth stating them before
 
 **Flutter 3.44.4 · Dart 3.12 · Riverpod 3 · freezed · auto_route**
 
+**Architecture walkthrough → [damienferrari.github.io/tictactoe](https://damienferrari.github.io/tictactoe/)**
+— the same story layer by layer, with the dependency graphs, a catalogue of every provider
+and what it supplies, and the full sequence from a tap on a cell down to the disk write.
+Written in French; this README covers the same ground in English.
+
 ---
 
 ## Run it
