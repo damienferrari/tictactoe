@@ -1,0 +1,30 @@
+name: tictactoe
+description: Morpion contre la machine. Ce paquet est la couche de composition — il branche, il ne calcule pas.
+publish_to: none
+version: 1.0.0+1
+
+environment:
+  sdk: ^3.12.0
+
+resolution: workspace
+
+dependencies:
+  auto_route: ^11.0.0
+  flutter:
+    sdk: flutter
+  flutter_riverpod: ^3.0.0
+  game_domain:
+  game_presentation:
+  scoreboard_data:
+  scoreboard_domain:
+  scoreboard_presentation:
+  shared_preferences: ^2.5.4
+
+dev_dependencies:
+  auto_route_generator: ^10.0.0
+  flutter_test:
+    sdk: flutter
+  yaml: ^3.1.2
+
+flutter:
+  uses-material-design: true
