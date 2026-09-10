@@ -1,0 +1,3230 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  :root { color-scheme: light; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 14px system-ui, sans-serif; }
+  img { max-width: 100%; }
+  [hidden] { display: none !important; }
+</style>
+<title>Morpion, couche par couche</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Chivo:wght@400;600;700;900&family=Literata:opsz,wght@7..72,400;7..72,500;7..72,600&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --paper:      #f5f6f8;
+    --surface:    #ffffff;
+    --surface-2:  #eceef3;
+    --ink:        #14181f;
+    --muted:      #5d6472;
+    --line:       #d7dae2;
+    --line-soft:  #e5e8ee;
+    --rule:       #c9d4ea;
+    --accent:     #29489b;
+    --accent-ink: #1d3573;
+    --accent-bg:  #e4e9f6;
+    --mark-x:     #29489b;
+    --mark-o:     #a8442c;
+    --warn:       #8a5a12;
+    --warn-bg:    #f6efe0;
+    --stop:       #a8442c;
+    --stop-bg:    #f7e8e3;
+    --code-bg:    #eef0f4;
+
+    --display: 'Chivo', 'Helvetica Neue', Arial, sans-serif;
+    --body:    'Literata', Georgia, 'Times New Roman', serif;
+    --mono:    'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, monospace;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root:not([data-theme="light"]) {
+      --paper:      #101319;
+      --surface:    #171b23;
+      --surface-2:  #1e2330;
+      --ink:        #e6e9ef;
+      --muted:      #98a1b2;
+      --line:       #2a303c;
+      --line-soft:  #212734;
+      --rule:       #2c3a55;
+      --accent:     #7d9bec;
+      --accent-ink: #a8bef5;
+      --accent-bg:  #1a2338;
+      --mark-x:     #7d9bec;
+      --mark-o:     #e08a6c;
+      --warn:       #d3a55f;
+      --warn-bg:    #2b2317;
+      --stop:       #e08a6c;
+      --stop-bg:    #2c1e1a;
+      --code-bg:    #1b202a;
+    }
+  }
+  :root[data-theme="dark"] {
+    --paper:      #101319;
+    --surface:    #171b23;
+    --surface-2:  #1e2330;
+    --ink:        #e6e9ef;
+    --muted:      #98a1b2;
+    --line:       #2a303c;
+    --line-soft:  #212734;
+    --rule:       #2c3a55;
+    --accent:     #7d9bec;
+    --accent-ink: #a8bef5;
+    --accent-bg:  #1a2338;
+    --mark-x:     #7d9bec;
+    --mark-o:     #e08a6c;
+    --warn:       #d3a55f;
+    --warn-bg:    #2b2317;
+    --stop:       #e08a6c;
+    --stop-bg:    #2c1e1a;
+    --code-bg:    #1b202a;
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    background: var(--paper);
+    color: var(--ink);
+    font-family: var(--body);
+    font-size: 17px;
+    line-height: 1.62;
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    display: grid;
+    grid-template-columns: 232px minmax(0, 1fr);
+    gap: 0 56px;
+    max-width: 1180px;
+    margin: 0 auto;
+    padding: 0 32px 120px;
+  }
+  @media (max-width: 900px) {
+    .page { grid-template-columns: minmax(0, 1fr); gap: 0; padding: 0 20px 80px; }
+    .rail { display: none; }
+  }
+
+  /* ── masthead ────────────────────────────────────────────────── */
+  .masthead {
+    grid-column: 1 / -1;
+    padding: 64px 0 40px;
+    border-bottom: 2px solid var(--ink);
+    margin-bottom: 48px;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    gap: 32px;
+    align-items: end;
+  }
+  @media (max-width: 700px) { .masthead { grid-template-columns: minmax(0, 1fr); } }
+  .masthead h1 {
+    font-family: var(--display);
+    font-weight: 900;
+    font-size: clamp(2.1rem, 5.4vw, 3.3rem);
+    line-height: 1.02;
+    letter-spacing: -0.024em;
+    margin: 0 0 14px;
+    text-wrap: balance;
+  }
+  .masthead .standfirst {
+    margin: 0;
+    font-size: 1.08rem;
+    color: var(--muted);
+    max-width: 54ch;
+  }
+  .eyebrow {
+    display: block;
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    font-weight: 600;
+    letter-spacing: 0.16em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 16px;
+  }
+
+  /* the 3×3 motif, drawn once, at real size */
+  .glyph { width: 108px; height: 108px; flex: none; }
+
+  /* ── rail ────────────────────────────────────────────────────── */
+  .rail {
+    grid-column: 1;
+    align-self: start;
+    position: sticky;
+    top: 24px;
+    max-height: calc(100vh - 48px);
+    overflow-y: auto;
+    padding-right: 12px;
+    font-family: var(--display);
+    font-size: 0.86rem;
+  }
+  .rail ol { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 1px; }
+  .rail .grp {
+    font-family: var(--mono);
+    font-size: 0.63rem;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin: 22px 0 7px;
+  }
+  .rail .grp:first-child { margin-top: 0; }
+  .rail a {
+    display: block;
+    padding: 5px 10px 5px 12px;
+    color: var(--muted);
+    text-decoration: none;
+    border-left: 2px solid var(--line);
+    line-height: 1.35;
+  }
+  .rail a:hover { color: var(--ink); background: var(--surface-2); }
+  .rail a.on { color: var(--accent-ink); border-left-color: var(--accent); font-weight: 600; background: var(--accent-bg); }
+  .rail a:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  .rail a .num {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    color: var(--accent);
+    margin-right: 7px;
+    font-weight: 600;
+  }
+
+  /* ── flow ────────────────────────────────────────────────────── */
+  main { grid-column: 2; min-width: 0; }
+  @media (max-width: 900px) { main { grid-column: 1; } }
+
+  section { margin: 0 0 76px; scroll-margin-top: 20px; }
+  .sec-head { margin-bottom: 26px; }
+  .sec-head h2 {
+    font-family: var(--display);
+    font-weight: 700;
+    font-size: clamp(1.5rem, 3vw, 2rem);
+    line-height: 1.13;
+    letter-spacing: -0.018em;
+    margin: 0;
+    text-wrap: balance;
+  }
+  h3 {
+    font-family: var(--display);
+    font-weight: 600;
+    font-size: 1.13rem;
+    letter-spacing: -0.008em;
+    margin: 40px 0 12px;
+    text-wrap: balance;
+  }
+  p { margin: 0 0 18px; max-width: 68ch; }
+  .stack > *:last-child { margin-bottom: 0; }
+  strong { font-weight: 600; }
+  em { font-style: italic; }
+
+  a { color: var(--accent-ink); text-decoration-thickness: 1px; text-underline-offset: 2px; }
+
+  code {
+    font-family: var(--mono);
+    font-size: 0.855em;
+    background: var(--code-bg);
+    padding: 0.1em 0.34em;
+    border-radius: 3px;
+    word-break: break-word;
+  }
+
+  ul.plain { margin: 0 0 18px; padding: 0; list-style: none; max-width: 68ch; display: flex; flex-direction: column; gap: 11px; }
+  ul.plain > li { padding-left: 22px; position: relative; }
+  ul.plain > li::before {
+    content: '';
+    position: absolute;
+    left: 2px; top: 0.62em;
+    width: 7px; height: 7px;
+    background: var(--accent);
+  }
+
+  /* ── code blocks ─────────────────────────────────────────────── */
+  figure { margin: 26px 0; }
+  .fname {
+    font-family: var(--mono);
+    font-size: 0.7rem;
+    letter-spacing: 0.02em;
+    color: var(--muted);
+    margin: 0 0 7px;
+    word-break: break-all;
+  }
+  .fname b { color: var(--accent-ink); font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; margin-right: 8px; }
+  pre {
+    margin: 0;
+    background: var(--surface);
+    border: 1px solid var(--line);
+    border-left: 3px solid var(--accent);
+    border-radius: 0 4px 4px 0;
+    padding: 16px 18px;
+    overflow-x: auto;
+  }
+  pre code {
+    background: none;
+    padding: 0;
+    font-size: 0.79rem;
+    line-height: 1.68;
+    color: var(--ink);
+    white-space: pre;
+  }
+  pre code .c { color: var(--muted); font-style: italic; }
+  pre code .k { color: var(--accent-ink); font-weight: 600; }
+  figcaption { font-size: 0.93rem; color: var(--muted); margin-top: 11px; max-width: 68ch; }
+
+  /* ── figures on graph paper ──────────────────────────────────── */
+  .plate {
+    background:
+      linear-gradient(var(--rule) 1px, transparent 1px),
+      linear-gradient(90deg, var(--rule) 1px, transparent 1px),
+      var(--surface);
+    background-size: 22px 22px, 22px 22px, auto;
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    padding: 24px;
+    overflow-x: auto;
+  }
+  .plate.tight { padding: 18px; }
+  .plate pre { background: none; border: none; padding: 0; border-radius: 0; }
+  .plate pre code { font-size: 0.755rem; line-height: 1.62; }
+
+  /* ── tables ──────────────────────────────────────────────────── */
+  .tw { overflow-x: auto; border: 1px solid var(--line); border-radius: 4px; background: var(--surface); }
+  table { border-collapse: collapse; width: 100%; min-width: 520px; font-size: 0.92rem; }
+  th, td { text-align: left; vertical-align: top; padding: 12px 15px; border-bottom: 1px solid var(--line-soft); }
+  th {
+    font-family: var(--mono);
+    font-size: 0.66rem;
+    font-weight: 600;
+    letter-spacing: 0.11em;
+    text-transform: uppercase;
+    color: var(--muted);
+    background: var(--surface-2);
+    white-space: nowrap;
+  }
+  tr:last-child td { border-bottom: none; }
+  td:first-child { font-family: var(--mono); font-size: 0.78rem; color: var(--accent-ink); font-weight: 500; }
+  td.dir { white-space: nowrap; }
+
+  /* ── layer / package chips ───────────────────────────────────── */
+  .lay {
+    display: inline-block;
+    font-family: var(--mono);
+    font-size: 0.63rem;
+    font-weight: 600;
+    letter-spacing: 0.09em;
+    text-transform: uppercase;
+    padding: 3px 7px;
+    border-radius: 3px;
+    white-space: nowrap;
+  }
+  .lay.dom { background: var(--accent-bg); color: var(--accent-ink); }
+  .lay.dat { background: var(--warn-bg);   color: var(--warn); }
+  .lay.pre { background: var(--stop-bg);   color: var(--stop); }
+  .lay.com { background: var(--surface-2); color: var(--muted); }
+
+  /* ── arbre annoté ────────────────────────────────────────────── */
+  .tree {
+    border: 1px solid var(--line);
+    border-radius: 4px;
+    background: var(--surface);
+    overflow: hidden;
+    margin: 0 0 22px;
+  }
+  .tree .row {
+    display: grid;
+    grid-template-columns: minmax(0, 292px) minmax(0, 1fr);
+    gap: 0 22px;
+    padding: 8px 16px;
+    border-bottom: 1px solid var(--line-soft);
+    align-items: baseline;
+  }
+  .tree .row:last-child { border-bottom: none; }
+  .tree .nm {
+    font-family: var(--mono);
+    font-size: 0.755rem;
+    line-height: 1.5;
+    color: var(--ink);
+    word-break: break-word;
+    padding-left: calc(var(--d, 0) * 15px);
+  }
+  .tree .rl { font-size: 0.875rem; line-height: 1.5; color: var(--muted); }
+  .tree .rl code { font-size: 0.8em; }
+  .tree .rl strong { color: var(--ink); }
+  .tree .dir { background: var(--surface-2); }
+  .tree .dir .nm { color: var(--accent-ink); font-weight: 600; }
+  .tree .hd {
+    background: var(--accent-bg);
+    border-bottom: 1px solid var(--line);
+    padding: 12px 16px;
+  }
+  .tree .hd .nm { font-size: 0.84rem; font-weight: 600; color: var(--accent-ink); padding-left: 0; }
+  .tree .hd .nm .lay { margin-right: 8px; }
+  .tree .hd .rl { color: var(--accent-ink); }
+  .tree .pth .nm { color: var(--muted); font-size: 0.7rem; }
+  @media (max-width: 700px) {
+    .tree .row { grid-template-columns: minmax(0, 1fr); gap: 3px; }
+    .tree .nm { padding-left: calc(var(--d, 0) * 11px); }
+  }
+
+  /* ── callout ─────────────────────────────────────────────────── */
+  .note {
+    border: 1px solid var(--line);
+    border-top: 3px solid var(--accent);
+    background: var(--surface);
+    padding: 18px 20px;
+    margin: 26px 0;
+    border-radius: 0 0 4px 4px;
+  }
+  .note > *:last-child { margin-bottom: 0; }
+  .note .lbl {
+    display: block;
+    font-family: var(--mono);
+    font-size: 0.66rem;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--accent);
+    margin-bottom: 9px;
+  }
+  .note.stop { border-top-color: var(--stop); }
+  .note.stop .lbl { color: var(--stop); }
+
+  /* ── the board figure ────────────────────────────────────────── */
+  .boards { display: flex; flex-wrap: wrap; gap: 30px; align-items: flex-start; }
+  .board {
+    display: grid;
+    grid-template-columns: repeat(3, 46px);
+    grid-template-rows: repeat(3, 46px);
+    gap: 0;
+    border: 2px solid var(--ink);
+    flex: none;
+  }
+  .board div {
+    display: grid;
+    place-items: center;
+    border-right: 1px solid var(--line);
+    border-bottom: 1px solid var(--line);
+    font-family: var(--mono);
+    font-size: 0.78rem;
+    color: var(--muted);
+  }
+  .board div:nth-child(3n) { border-right: none; }
+  .board div:nth-child(n+7) { border-bottom: none; }
+  .board div.x { color: var(--mark-x); font-family: var(--display); font-size: 1.35rem; font-weight: 700; }
+  .board div.o { color: var(--mark-o); font-family: var(--display); font-size: 1.35rem; font-weight: 700; }
+  .board div.hl { background: var(--accent-bg); }
+  .board-cap { font-size: 0.88rem; color: var(--muted); max-width: 30ch; }
+
+  /* ── steps ───────────────────────────────────────────────────── */
+  ol.steps { list-style: none; margin: 0; padding: 0; counter-reset: st; display: flex; flex-direction: column; gap: 0; }
+  ol.steps > li {
+    counter-increment: st;
+    display: grid;
+    grid-template-columns: 46px minmax(0, 1fr);
+    gap: 20px;
+    padding: 22px 0;
+    border-top: 1px solid var(--line);
+  }
+  ol.steps > li:last-child { border-bottom: 1px solid var(--line); }
+  ol.steps > li::before {
+    content: counter(st);
+    font-family: var(--display);
+    font-weight: 900;
+    font-size: 1.6rem;
+    line-height: 1;
+    color: var(--accent);
+    font-variant-numeric: tabular-nums;
+  }
+  ol.steps h3 { margin: 0 0 8px; font-size: 1.04rem; }
+  ol.steps p { font-size: 0.96rem; margin-bottom: 10px; }
+  .proof {
+    font-family: var(--mono);
+    font-size: 0.72rem;
+    color: var(--muted);
+    display: block;
+    padding-top: 4px;
+    border-top: 1px dashed var(--line);
+    margin-top: 10px;
+  }
+  .proof b { color: var(--accent-ink); font-weight: 600; text-transform: uppercase; letter-spacing: 0.1em; margin-right: 8px; }
+
+  footer {
+    grid-column: 2;
+    border-top: 1px solid var(--line);
+    padding-top: 22px;
+    font-size: 0.9rem;
+    color: var(--muted);
+    max-width: 68ch;
+  }
+  @media (max-width: 900px) { footer { grid-column: 1; } }
+
+  @media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
+    html { scroll-behavior: auto; }
+  }
+  html { scroll-behavior: smooth; }
+</style>
+</head>
+<body>
+
+<div class="page">
+
+  <header class="masthead">
+    <div>
+      <span class="eyebrow">Challenge Flutter · note d'architecture</span>
+      <h1>Morpion,<br>couche par couche</h1>
+      <p class="standfirst">
+        Deux features en paquets séparés, trois couches, et un fichier de providers par rôle.
+        Ce que chaque couche a le droit de savoir, et pourquoi le plateau ne connaît pas le score.
+      </p>
+    </div>
+    <svg class="glyph" viewBox="0 0 108 108" role="img" aria-label="Grille de morpion, X et O">
+      <rect x="0" y="0" width="108" height="108" fill="none"/>
+      <line x1="36" y1="4" x2="36" y2="104" stroke="var(--line)" stroke-width="1.5"/>
+      <line x1="72" y1="4" x2="72" y2="104" stroke="var(--line)" stroke-width="1.5"/>
+      <line x1="4" y1="36" x2="104" y2="36" stroke="var(--line)" stroke-width="1.5"/>
+      <line x1="4" y1="72" x2="104" y2="72" stroke="var(--line)" stroke-width="1.5"/>
+      <g stroke="var(--mark-x)" stroke-width="3.4" stroke-linecap="round" fill="none">
+        <line x1="8" y1="8" x2="28" y2="28"/><line x1="28" y1="8" x2="8" y2="28"/>
+        <line x1="44" y1="44" x2="64" y2="64"/><line x1="64" y1="44" x2="44" y2="64"/>
+        <line x1="80" y1="80" x2="100" y2="100"/><line x1="100" y1="80" x2="80" y2="100"/>
+      </g>
+      <g stroke="var(--mark-o)" stroke-width="3.4" fill="none">
+        <circle cx="90" cy="18" r="11"/><circle cx="18" cy="54" r="11"/>
+      </g>
+      <line x1="10" y1="10" x2="98" y2="98" stroke="var(--accent)" stroke-width="2.6" stroke-linecap="round" opacity="0.55"/>
+    </svg>
+  </header>
+
+  <nav class="rail" aria-label="Sommaire">
+    <ol>
+      <li class="grp">Les concepts</li>
+      <li><a href="#objectif">Ce qu'on construit</a></li>
+      <li><a href="#regle">La règle de dépendance</a></li>
+      <li><a href="#couches">Ce que contient chaque couche</a></li>
+      <li><a href="#isolement">Deux features qui s'ignorent</a></li>
+      <li><a href="#inversion">L'inversion, six fois</a></li>
+      <li class="grp">L'injection</li>
+      <li><a href="#triple">Le triple de providers</a></li>
+      <li><a href="#di">providers_di</a></li>
+      <li><a href="#internal">providers_internal</a></li>
+      <li><a href="#public">providers</a></li>
+      <li><a href="#catalogue">Les 20 providers</a></li>
+      <li><a href="#typedefs">Les typedef, expliqués</a></li>
+      <li><a href="#bind">Les fonctions bind*</a></li>
+      <li><a href="#tracabilite">Qui expose, qui consomme</a></li>
+      <li><a href="#widgets">Les widgets, qui les monte</a></li>
+      <li class="grp">Le domaine</li>
+      <li><a href="#plateau">Le plateau et les règles</a></li>
+      <li><a href="#ia">L'adversaire, minimax</a></li>
+      <li class="grp">La construction</li>
+      <li><a href="#routing">Le routing</a></li>
+      <li><a href="#sequence">La séquence, d’un tap au disque</a></li>
+      <li><a href="#fichiers-main">L'ordre d'écriture d'une couche</a></li>
+      <li><a href="#fichiers">L'inventaire des 86 fichiers</a></li>
+      <li><a href="#etapes"><span class="num">1–8</span>Le chantier et ses preuves</a></li>
+      <li><a href="#arbitrages">Les arbitrages</a></li>
+    </ol>
+  </nav>
+
+  <main>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <section id="objectif">
+      <div class="sec-head"><h2>Ce qu'on construit</h2></div>
+      <div class="stack">
+        <p>
+          Un morpion jouable contre la machine, en local. L'énoncé impose une seule contrainte
+          d'architecture — Clean Architecture — et laisse le reste libre. Le choix structurant est
+          donc celui-ci : <strong>deux features, dans des paquets séparés</strong>, pour que la
+          séparation des responsabilités soit une propriété du dépôt et pas une intention dans un
+          README.
+        </p>
+        <p>
+          Les deux features sont volontairement dissemblables. <code>game</code> est du calcul pur :
+          les règles, l'état du plateau, l'adversaire artificiel — <strong>pas une ligne de
+          persistance</strong>, donc pas de couche <code>data</code>. <code>scoreboard</code> est
+          l'inverse : trois lignes de logique, et une vraie frontière entre un JSON stocké sur
+          l'appareil et une entité de domaine. Le contraste est le propos : une couche
+          <code>data</code> n'est pas un réflexe de gabarit, c'est une réponse à un besoin de
+          persistance.
+        </p>
+      </div>
+
+      <figure>
+        <p class="fname"><b>arborescence</b> tictactoe/</p>
+        <div class="plate">
+<pre><code>tictactoe/
+├── pubspec.yaml              <span class="c">← pub workspace : un seul lockfile, un seul `pub get`</span>
+├── analysis_options.yaml     <span class="c">← une seule config de lint pour tout l'arbre</span>
+├── tool/                     <span class="c">← check.sh, prove_independence.sh</span>
+│
+├── apps/tictactoe/           <span class="c">╭─ LA COMPOSITION. Le seul paquet qui voit les deux</span>
+│   └── lib/                  <span class="c">│  features. main, ProviderScope, l'arbre de routes,</span>
+│                             <span class="c">╰─ et la traduction — aucune règle de jeu.</span>
+└── packages/features/
+    ├── game/                 <span class="c">╭─ Feature 1 : le plateau, les règles, l'IA</span>
+    │   ├── domain/           <span class="c">│  Dart pur. Zéro import Flutter.</span>
+    │   └── presentation/     <span class="c">╰─ Pas de couche data : rien à persister.</span>
+    │
+    └── scoreboard/           <span class="c">╭─ Feature 2 : le score, qui survit au redémarrage</span>
+        ├── domain/           <span class="c">│  entité + interface de repository</span>
+        ├── data/             <span class="c">│  DTO + mapper + stockage local</span>
+        └── presentation/     <span class="c">╰─ trois tuiles, et rien d'autre</span>
+</code></pre>
+        </div>
+        <figcaption>
+          Six paquets — cinq de feature, plus l'app. Le <em>pub workspace</em> de Dart 3.6+ les
+          résout ensemble : un seul <code>pubspec.lock</code>, un seul
+          <code>flutter pub get</code>, et les paquets se référencent par leur nom sans
+          <code>path:</code>.
+        </figcaption>
+      </figure>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <section id="regle">
+      <div class="sec-head"><h2>La règle de dépendance, et ce qu'elle interdit vraiment</h2></div>
+      <div class="stack">
+        <p>
+          Clean Architecture tient en une phrase : <strong>les dépendances pointent vers
+          l'intérieur</strong>. Le domaine ne connaît personne ; la data et la présentation
+          connaissent le domaine ; rien ne remonte. Tout le reste — le nom des dossiers, le nombre
+          de couches — est du décor autour de cette règle.
+        </p>
+        <p>
+          Ce qu'elle interdit concrètement, et qui est facile à violer sans le voir : le domaine ne
+          peut pas importer <code>package:flutter</code>. Pas par purisme — parce qu'un
+          <code>Color</code>, un <code>BuildContext</code> ou un <code>ChangeNotifier</code> dans une
+          règle de jeu la rend intestable hors d'un widget et non réutilisable ailleurs. Ici
+          <code>game_domain</code> est un paquet Dart pur : ses tests tournent avec
+          <code>dart test</code>, sans binding Flutter, en quelques millisecondes.
+        </p>
+      </div>
+
+      <figure>
+        <p class="fname"><b>figure 1</b> le sens des flèches</p>
+        <div class="plate">
+<pre><code>            ┌──────────────────────────────────────────────┐
+            │  apps/tictactoe   <span class="c">— la composition</span>          │
+            │  le seul à tout voir : il branche, c'est tout │
+            └────────┬────────────────────────┬─────────────┘
+                     │ dépend de              │ dépend de
+        ┌────────────▼──────────┐  ┌──────────▼────────────┐
+        │ game_presentation     │  │ scoreboard_presentation│
+        └────────────┬──────────┘  └──────────┬────────────┘
+                     │                        │
+                     │            ┌───────────┼────────────┐
+                     │            │           │            │
+        ┌────────────▼──────────┐ │ ┌─────────▼──────────┐ │
+        │ game_domain           │ │ │ scoreboard_domain  │◄┘
+        │ <span class="k">Dart pur</span>              │ │ │ <span class="k">Dart pur</span>           │
+        │ ne dépend de RIEN     │ │ │ ne dépend de RIEN  │
+        └───────────────────────┘ │ └─────────▲──────────┘
+                                  │           │ implémente
+                                  │ ┌─────────┴──────────┐
+                                  └─│ scoreboard_data    │
+                                    └────────────────────┘
+
+   Toutes les flèches pointent vers un domaine. Aucune n'en sort.
+</code></pre>
+        </div>
+        <figcaption>
+          <code>scoreboard_data</code> pointe vers <code>scoreboard_domain</code> parce qu'il
+          <em>implémente</em> son interface de repository. C'est l'inversion de dépendance : le
+          domaine déclare le contrat, la data s'y plie, et le domaine ignore jusqu'au nom de la
+          classe qui le sert.
+        </figcaption>
+      </figure>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <section id="couches">
+      <div class="sec-head"><h2>Ce que contient chaque couche</h2></div>
+      <div class="stack">
+        <p>
+          La question utile n'est pas « combien de couches » mais « qu'est-ce qui a le droit d'être
+          ici ». Voici la réponse, pour ce projet, sans généralité.
+        </p>
+      </div>
+
+      <div class="tw">
+        <table>
+          <thead>
+            <tr><th>Couche</th><th>Ce qui y vit</th><th>Ce qui n'y entre jamais</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><span class="lay dom">domain</span></td>
+              <td>
+                Les <strong>entités</strong> (<code>Board</code>, <code>Mark</code>,
+                <code>GameOutcome</code>, <code>Scoreboard</code>), les <strong>interfaces de
+                repository</strong>, et les <strong>comportements</strong> — des objets appelables
+                nommés par un verbe : <code>ApplyMove</code>, <code>EvaluateOutcome</code>,
+                <code>ChooseMove</code>, <code>RecordMatch</code>.
+              </td>
+              <td>
+                Flutter. Un JSON. Un client HTTP. Un <code>SharedPreferences</code>. Un widget. Et
+                <code>DateTime.now()</code> — l'horloge s'injecte, sinon un test devient dépendant
+                de la minute où il tourne.
+              </td>
+            </tr>
+            <tr>
+              <td><span class="lay dat">data</span></td>
+              <td>
+                Les <strong>DTO</strong> (<code>ScoreboardDto</code>, sérialisable), leurs
+                <strong>mappers</strong> vers les entités, et les <strong>data sources</strong>. Ici
+                la data source <em>implémente directement</em> l'interface du domaine : une seule
+                source, donc aucune classe de repository à intercaler.
+              </td>
+              <td>
+                Une règle de jeu. Un widget. Et surtout : <strong>un DTO ne sort pas de la
+                couche</strong> — une data source rend une entité, jamais son DTO.
+              </td>
+            </tr>
+            <tr>
+              <td><span class="lay pre">presentation</span></td>
+              <td>
+                Les <strong>widgets</strong>, l'<strong>état d'écran</strong>
+                (<code>GameUiState</code> + son notifier), et le <strong>thème</strong> de la
+                feature.
+              </td>
+              <td>
+                La couche data. La présentation ne connaît que le domaine — c'est ce qui permet de
+                remplacer le stockage sans toucher un pixel.
+              </td>
+            </tr>
+            <tr>
+              <td><span class="lay com">composition</span></td>
+              <td>
+                Le <code>main</code>, le <code>ProviderScope</code>, tous les branchements, et la
+                <strong>traduction entre features</strong>.
+              </td>
+              <td>
+                Toute logique qui pourrait vivre dans une feature. Si la composition se met à
+                calculer, c'est qu'une feature manque.
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="note">
+        <span class="lbl">Le détail qui fait la différence en revue</span>
+        <p>
+          <code>game</code> n'a pas de couche <code>data</code>, et c'est <em>volontaire</em>. Créer
+          un <code>game/data/</code> vide pour « respecter le patron » serait le contresens exact :
+          une couche existe quand une frontière technique la justifie. Le plateau n'a pas de
+          frontière technique — il n'y a rien à sérialiser, rien à aller chercher.
+        </p>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <section id="isolement">
+      <div class="sec-head"><h2>Deux features qui s'ignorent, et le pont entre elles</h2></div>
+      <div class="stack">
+        <p>
+          Voici le cœur de la démonstration. Quand une partie se termine, le score doit être mis à
+          jour. La solution évidente — <code>game</code> appelle <code>scoreboard</code> — est
+          exactement celle qu'il faut refuser : elle soude deux features ensemble, et six mois plus
+          tard on ne peut plus livrer l'une sans l'autre.
+        </p>
+        <p>
+          Alors <code>game</code> ne connaît pas <code>scoreboard</code>. Il déclare un
+          <strong>port</strong> — « quand une partie se termine, quelqu'un voudra le savoir » — sous
+          la forme d'un contrat qui <strong>lève tant que personne ne l'a nourri</strong>. La
+          composition, seule à voir les deux côtés, l'implémente : elle traduit un
+          <code>GameOutcome</code> en <code>MatchResult</code> et appelle <code>scoreboard</code>.
+        </p>
+      </div>
+
+      <figure>
+        <p class="fname"><b>figure 2</b> le trajet d'une partie finie</p>
+        <div class="plate">
+<pre><code>  ① le joueur pose son symbole
+        │
+  ┌─────▼──────────────────────────┐
+  │ game_presentation              │  GameUiStateNotifier applique le coup,
+  │ GameUiStateNotifier            │  évalue l'issue, et si la partie est finie
+  └─────┬──────────────────────────┘  appelle le port. Il ne sait pas qui écoute.
+        │ ② onGameFinished(outcome, humanMark)
+  ┌─────▼──────────────────────────┐
+  │ game_presentation              │  <span class="k">CONTRAT</span> — lève tant que la composition
+  │ providers_di.dart              │  ne l'a pas branché. Un oubli = crash nommé,
+  └─────┬──────────────────────────┘  pas un score qui ne bouge plus en silence.
+        │ ③ nourri par bindProviders()
+  ┌─────▼──────────────────────────────────────────────────┐
+  │ apps/tictactoe                                         │
+  │ traduit GameOutcome ──▶ MatchResult, puis appelle       │
+  │ scoreboard. C'est ICI, et nulle part ailleurs, que les  │
+  │ deux vocabulaires se rencontrent.                       │
+  └─────┬──────────────────────────────────────────────────┘
+        │ ④ recordMatch(MatchResult.win)
+  ┌─────▼──────────────────────────┐
+  │ scoreboard_domain              │  RecordMatch lit le score, l'incrémente,
+  │ RecordMatch                    │  le fait persister. Ignore tout du morpion :
+  └────────────────────────────────┘  il ne sait pas ce qu'est une ligne gagnante.
+
+        ✗  game_presentation ──▶ scoreboard_*        INTERDIT
+        ✗  scoreboard_* ──▶ game_*                   INTERDIT
+           <span class="c">un test d'architecture lit les pubspec et échoue si ça arrive</span>
+</code></pre>
+        </div>
+        <figcaption>
+          Le bénéfice se mesure au retrait : supprimer <code>scoreboard</code> du workspace laisse
+          <code>game</code> compilable et jouable. C'est la définition opérationnelle de « séparé ».
+        </figcaption>
+      </figure>
+
+      <h3>Deux vérifications, et elles ne vérifient pas la même chose</h3>
+      <div class="stack">
+        <p>
+          <code>test/architecture/dependency_rule_test.dart</code> lit les sept manifestes et échoue
+          sur une dépendance entre features. Il affirme le <strong>négatif</strong> : rien ne déclare
+          ce qui est interdit. Utile, mais un paquet peut très bien ne rien déclarer d'interdit et
+          rester incapable de vivre seul.
+        </p>
+        <p>
+          <code>tool/prove_independence.sh</code> affirme le <strong>positif</strong>. Pour chaque
+          feature, il <em>déplace physiquement</em> l'autre feature et l'app hors de l'arbre,
+          re-résout les dépendances, puis analyse et lance les tests de ce qui reste.
+        </p>
+      </div>
+
+      <figure>
+        <p class="fname">./tool/prove_independence.sh — sortie réelle</p>
+        <div class="plate tight">
+<pre><code>════════ only game remains ════════          ════════ only scoreboard remains ════════
+No issues found!                             No issues found!
+  ── game/domain          <span class="k">45 tests</span>            ── scoreboard/domain      <span class="k">9 tests</span>
+  ── game/presentation    <span class="k">16 tests</span>            ── scoreboard/data        <span class="k">7 tests</span>
+                                               ── scoreboard/presentation  <span class="k">3 tests</span>
+
+════════ each feature builds and tests on its own ════════</code></pre>
+        </div>
+        <figcaption>
+          Une feature qui compile et se teste alors que <em>le reste du dépôt n'existe plus sur le
+          disque</em> est indépendante dans le seul sens qui compte. Le script remet tout en place
+          par un <code>trap</code>, même s'il échoue, et tourne en CI dans son propre job.
+        </figcaption>
+      </figure>
+
+      <div class="note stop">
+        <span class="lbl">Pourquoi pas un paquet partagé</span>
+        <p>
+          On pourrait mettre <code>MatchResult</code> dans un <code>shared_domain</code> que les deux
+          features importent. À deux features et un enum de trois valeurs, ce paquet coûterait plus
+          qu'il ne rend : <code>scoreboard</code> définit <em>son</em> vocabulaire, la composition
+          traduit, et il n'y a rien à partager. Le paquet partagé devient le bon outil quand le
+          vocabulaire commun grossit — et sa règle est alors stricte : <strong>des entités
+          seulement</strong>, jamais de logique métier.
+        </p>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <section id="inversion">
+      <div class="sec-head"><h2>L'inversion de dépendance, six fois et jamais pareil</h2></div>
+      <div class="stack">
+        <p>
+          On résume souvent l'inversion de dépendance à un seul geste : « mettre l'interface du
+          repository dans le domaine ». C'est un cas, pas la règle. La règle est une
+          <strong>direction</strong> : <em>c'est celui qui a besoin qui déclare le contrat, et celui
+          qui sait faire qui s'y plie</em>. Une fois formulée comme ça, elle s'applique bien au-delà
+          de l'accès aux données — et ce projet en contient six instances qu'il vaut la peine de
+          distinguer, parce qu'elles n'inversent pas la même chose.
+        </p>
+      </div>
+
+      <div class="tw">
+        <table>
+          <thead>
+            <tr><th>Le contrat</th><th>Déclaré par</th><th>Implémenté par</th><th>Ce qui est inversé</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>ScoreboardRepository</code></td>
+              <td><span class="lay dom">scoreboard_domain</span></td>
+              <td><span class="lay dat">scoreboard_data</span></td>
+              <td><strong>L'accès aux données</strong> — le cas d'école. Le domaine dit qu'il veut lire et écrire un score ; il ne saura jamais que c'est du JSON dans les préférences.</td>
+            </tr>
+            <tr>
+              <td><code>OnGameFinished</code></td>
+              <td><span class="lay pre">game_presentation</span></td>
+              <td><span class="lay com">composition</span></td>
+              <td><strong>Le flux de contrôle</strong> — ce n'est pas une dépendance <em>entrante</em> mais un évènement <em>sortant</em>. L'appelé ignore qui l'écoute, et c'est le seul mécanisme qui permet aux deux features de ne jamais se rencontrer.</td>
+            </tr>
+            <tr>
+              <td><code>GameRouting</code></td>
+              <td><span class="lay pre">game_presentation</span></td>
+              <td><span class="lay com">composition</span></td>
+              <td><strong>La navigation</strong> — la feature nomme un évènement, l'hôte choisit ce qu'il déclenche. Seul contrat à passer par sa propre fonction de branchement.</td>
+            </tr>
+            <tr>
+              <td><code>Random</code></td>
+              <td><span class="lay dom">game_domain</span></td>
+              <td><span class="lay com">composition</span></td>
+              <td><strong>Une dépendance ambiante</strong> — l'aléa, comme l'horloge. Le domaine refuse d'appeler <code>Random()</code> lui-même ; c'est ce qui rend l'IA reproductible en test.</td>
+            </tr>
+            <tr>
+              <td><code>KeyValueStore</code></td>
+              <td><span class="lay dat">scoreboard_data</span></td>
+              <td><span class="lay com">composition</span></td>
+              <td><strong>L'infrastructure de la data elle-même</strong> — le point qu'on rate le plus souvent : la couche data n'est pas le bas de la pile, elle a son propre bas.</td>
+            </tr>
+            <tr>
+              <td><code>Duration</code> <span class="chip ok">le seul à ne pas lever</span></td>
+              <td><span class="lay pre">game_presentation</span></td>
+              <td><span class="lay com">les tests</span></td>
+              <td><strong>Un réglage</strong> — la pause avant le coup machine. Il <em>proxie</em> un défaut interne, donc le brancher est facultatif : les tests y mettent <code>Duration.zero</code>, la production ne le touche pas.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <figure>
+        <p class="fname"><b>figure 4</b> déclarer et implémenter vont en sens contraire</p>
+        <div class="plate">
+<pre><code>            ┌───────────────────────────────────────────────┐
+            │            CELUI QUI A BESOIN                 │
+            │   déclare le contrat, et ne connaît que lui    │
+            └───────────────────────┬───────────────────────┘
+                                    │
+                     ══════ le contrat ══════
+                                    │
+            ┌───────────────────────▼───────────────────────┐
+            │            CELUI QUI SAIT FAIRE               │
+            │   implémente, et n'est nommé par personne     │
+            └───────────────────────────────────────────────┘
+
+   ① données      scoreboard_domain  ──▶ ◆ ◀── scoreboard_data
+   ② évènement    game_presentation  ──▶ ◆ ◀── composition
+   ③ navigation   game_presentation  ──▶ ◆ ◀── composition
+   ④ aléa         game_domain        ──▶ ◆ ◀── composition
+   ⑤ stockage     scoreboard_data    ──▶ ◆ ◀── composition
+   ⑥ réglage      game_presentation  ──▶ ◆ ◀── les tests <span class="c">(sinon : défaut interne)</span>
+
+   ──▶ « je déclare »          ◀── « j'implémente »          ◆ le contrat
+
+   Dans les cinq cas la flèche de COMPILATION va vers ◆, des deux côtés.
+   Aucun des deux paquets ne compile contre l'autre. C'est ça, l'inversion.
+</code></pre>
+        </div>
+        <figcaption>
+          Le test qui rend la propriété visible : les deux côtés d'un contrat n'ont jamais l'autre
+          dans leur <code>pubspec.yaml</code>. Seule la composition les a tous les deux — et c'est
+          précisément son travail.
+        </figcaption>
+      </figure>
+
+      <h3>Le cas ② mérite d'être détaillé</h3>
+      <div class="stack">
+        <p>
+          Les cas ①, ④, ⑤ répondent à « j'ai besoin de quelque chose ». Le cas ② répond à
+          <strong>« j'ai quelque chose à dire »</strong>, et c'est le seul qui permette à deux
+          features de ne jamais se rencontrer.
+        </p>
+        <p>
+          Sans lui, il faudrait bien que quelqu'un appelle quelqu'un : soit
+          <code>game</code> importe <code>scoreboard</code>, soit l'inverse. Le port casse ce
+          dilemme en retournant la question — <code>game</code> n'appelle personne, il
+          <em>publie</em> ; et publier vers un contrat, c'est publier vers personne en particulier.
+        </p>
+      </div>
+
+      <figure>
+        <p class="fname"><b>game_presentation</b> lib/src/notifiers/game_ui_state_notifier.br.dart</p>
+<pre><code><span class="c">// Ce que le notifier sait : qu'une partie vient de se terminer, et qu'il doit le dire.</span>
+<span class="c">// Ce qu'il ne sait pas, et ne saura jamais : qu'il existe un tableau des scores.</span>
+if (outcome case GameWin() || GameDraw()) {
+  ref.read(onGameFinishedProvider)(outcome, state.game.humanMark);
+}
+</code></pre>
+        <figcaption>
+          Deux lignes, et c'est tout le découplage. Remplacer le tableau des scores par un envoi
+          d'analytics, ou par les deux à la fois, ne touche pas ce fichier — seulement la closure
+          dans la composition.
+        </figcaption>
+      </figure>
+
+      <div class="note stop">
+        <span class="lbl">Ce que l'inversion n'est pas</span>
+        <p>
+          Mettre une interface devant chaque classe. Un contrat n'a de valeur que s'il a
+          <strong>plusieurs implémentations possibles, ou une frontière à protéger</strong>. Dans ce
+          projet, <code>ApplyMove</code> et <code>EvaluateOutcome</code> sont des classes concrètes,
+          sans interface : ce sont des fonctions pures du domaine, personne ne les remplacera, et
+          leur mettre une abstraction n'ajouterait qu'un fichier à lire. À l'inverse
+          <code>MoveStrategy</code> <em>est</em> une interface — parce qu'il en existe trois, et que
+          c'est le sens même du réglage de difficulté.
+        </p>
+      </div>
+    </section>
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <section id="triple">
+      <div class="sec-head"><h2>Le triple de providers : trois fichiers, trois questions</h2></div>
+      <div class="stack">
+        <p>
+          Chaque couche de chaque feature possède jusqu'à trois fichiers de providers. Ce n'est pas
+          un rangement : c'est une façon de rendre visible <strong>de quel côté de la frontière du
+          paquet</strong> se trouve chaque provider — l'information qu'on cherche en premier quand on
+          découvre un paquet, et celle qu'un fichier unique détruit.
+        </p>
+      </div>
+
+      <div class="tw">
+        <table>
+          <thead>
+            <tr><th>Fichier</th><th>La question à laquelle il répond</th><th class="dir">Sens</th></tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td><code>providers_di.dart</code></td>
+              <td><strong>« De quoi ai-je besoin de l'extérieur ? »</strong> Des déclarations sans implémentation, qui lèvent tant que personne ne les a nourries.</td>
+              <td class="dir">entrant ▸</td>
+            </tr>
+            <tr>
+              <td><code>providers_internal.dart</code></td>
+              <td><strong>« Comment suis-je câblé à l'intérieur ? »</strong> Data sources, stratégies, thème par défaut. Personne au-dehors n'a à le savoir.</td>
+              <td class="dir">◂ interne ▸</td>
+            </tr>
+            <tr>
+              <td><code>providers.dart</code></td>
+              <td><strong>« Qu'est-ce que j'offre, et par où me nourrit-on ? »</strong> L'API publique <em>plus</em> les fonctions <code>bind*</code>.</td>
+              <td class="dir">▸ sortant</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <figure>
+        <p class="fname"><b>figure 3</b> un paquet a une porte, pas trois</p>
+        <div class="plate">
+<pre><code>  ┌ ─ ─ ─ ─ ─ ─ ─ ─ ─  frontière du paquet  ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┐
+                   ┌══════════════════════════════════════════┐
+  ┌─────────────┐  ║ providers.dart                           ║
+  │ composition │─▶║ l'API publique + les fonctions bind*     ║
+  └─────────────┘  ╚═════════════════┬════════════════════════╝
+        │ bind*(…)                   │ overrideWith
+        │                            ▼                         ▲
+        │          ┌──────────────────────────────────────┐    │ l'impl
+        │ ✗ jamais │ providers_di.dart                    │    │ remonte,
+        └────✗────▶│ contrats entrants — stubs qui LÈVENT │    │ typée par
+          d'accès  └──────────────────┬───────────────────┘    │ le contrat
+          direct                      │ watch                  │
+                   ┌──────────────────▼───────────────────┐    │
+                   │ providers_internal.dart              │────┘
+                   │ stratégies, data sources, adaptateurs│
+                   └──────────────────────────────────────┘
+  └ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ─ ┘
+     une seule porte d'entrée (bind*), une seule porte de sortie
+</code></pre>
+        </div>
+        <figcaption>
+          L'image qui aide : le paquet est un appareil avec une prise.
+          <code>providers_di</code> ce sont les <em>broches</em> — ce qui doit être raccordé.
+          <code>bind*</code> est la <em>prise</em>, seul point de branchement offert.
+          <code>providers_internal</code> est le <em>circuit dans le boîtier</em>. Et les providers
+          publics sont ce que l'appareil <em>fait</em>.
+        </figcaption>
+      </figure>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <section id="di">
+      <div class="sec-head"><h2><code>providers_di</code> — le stub qui lève</h2></div>
+      <div class="stack">
+        <p>
+          C'est la pièce centrale, et la moins intuitive. Un contrat entrant n'est pas une valeur
+          optionnelle avec un défaut silencieux : c'est un provider qui <strong>jette</strong> tant
+          que la composition ne l'a pas fourni. Un oubli de câblage devient un crash immédiat et
+          nommé, au lieu d'un comportement dégradé qui passe la revue.
+        </p>
+        <p>
+          Le fichier est <strong>interne au paquet</strong> : le barrel ne l'exporte pas, et la
+          composition ne référence jamais ses symboles. On ne le nourrit que par les fonctions
+          <code>bind*</code>. C'est ce qui permet de renommer un contrat interne sans casser un
+          appelant.
+        </p>
+      </div>
+
+      <figure>
+        <p class="fname"><b>game_domain</b> lib/src/providers_di.dart</p>
+<pre><code><span class="c">// Le domaine a besoin d'UNE chose du dehors : une source d'aléa. L'IA en difficulté</span>
+<span class="c">// haute départage ses coups équivalents au hasard, sinon elle joue toujours la même</span>
+<span class="c">// partie. Injectée, donc : `Random()` en production, `Random(42)` dans les tests.</span>
+@riverpod
+Random random(Ref _) =&gt; throw StateError('randomProvider was never bound');
+</code></pre>
+        <figcaption>
+          Un domaine qui déclare son besoin d'aléa au lieu d'appeler <code>Random()</code> lui-même :
+          c'est la même discipline que refuser <code>DateTime.now()</code>. Sans elle, aucun test de
+          l'IA n'est reproductible.
+        </figcaption>
+      </figure>
+
+      <figure>
+        <p class="fname"><b>scoreboard_domain</b> lib/src/providers_di.dart</p>
+<pre><code><span class="c">// Le contrat qui porte toute l'inversion de dépendance du projet : le domaine dit</span>
+<span class="c">// qu'il veut un repository, et ne dira jamais lequel.</span>
+@riverpod
+ScoreboardRepository scoreboardRepository(Ref _) =&gt;
+    throw StateError('scoreboardRepositoryProvider was never bound');
+</code></pre>
+      </figure>
+
+      <figure>
+        <p class="fname"><b>game_presentation</b> lib/src/providers_di.dart</p>
+<pre><code><span class="c">// Deux contrats, et ils ne se comportent pas pareil — c'est la nuance à retenir.</span>
+
+<span class="c">// 1. Le port de fin de partie : il LÈVE. Il n'existe aucun défaut sensé — « ne rien</span>
+<span class="c">//    faire quand une partie se termine » est un bug, pas un repli.</span>
+@riverpod
+OnGameFinished onGameFinished(Ref _) =&gt; throw StateError('onGameFinishedProvider was never bound');
+
+<span class="c">// 2. Le port de navigation : il LÈVE aussi. On ne peut pas inventer une destination.</span>
+@riverpod
+GameRouting gameRouting(Ref _) =&gt; throw StateError('gameRoutingProvider was never bound');
+
+<span class="c">// 3. Le délai du CPU : il rend le défaut du paquet. Le brancher est donc facultatif —</span>
+<span class="c">//    les tests y mettent Duration.zero, la production ne le touche pas.</span>
+const _cpuMoveDelay = Duration(milliseconds: 350);
+
+@riverpod
+Duration cpuMoveDelay(Ref _) =&gt; _cpuMoveDelay;
+</code></pre>
+        <figcaption>
+          La règle derrière les deux formes : <em>existe-t-il un défaut qui ait un sens ?</em> Pour
+          une destination ou une source de données, non — donc ça lève. Pour une pause de 350 ms,
+          oui — donc ça le rend directement.
+        </figcaption>
+      </figure>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <section id="internal">
+      <div class="sec-head"><h2><code>providers_internal</code> — le circuit dans le boîtier</h2></div>
+      <div class="stack">
+        <p>
+          Tout ce qui est nécessaire au paquet et dont personne d'autre n'a à connaître l'existence.
+          C'est le fichier qu'on oublie le plus souvent, et son absence a une conséquence précise :
+          les détails d'implémentation finissent dans <code>providers.dart</code>, donc publics, donc
+          impossibles à renommer sans casser quelqu'un.
+        </p>
+      </div>
+
+      <figure>
+        <p class="fname"><b>game_domain</b> lib/src/providers_internal.dart</p>
+<pre><code><span class="c">// Les trois stratégies. Aucune n'est publique : le dehors demande « joue un coup »,</span>
+<span class="c">// il ne choisit pas l'algorithme. Changer de minimax à un réseau de neurones ne</span>
+<span class="c">// toucherait que ce fichier.</span>
+
+@riverpod
+MoveStrategy randomMoveStrategy(Ref ref) =&gt; RandomMoveStrategy(random: ref.watch(randomProvider));
+
+@riverpod
+MoveStrategy perfectMoveStrategy(Ref ref) =&gt; MinimaxMoveStrategy(random: ref.watch(randomProvider));
+
+<span class="c">// Le niveau moyen n'est pas un minimax bridé : c'est un minimax parfait qui se trompe</span>
+<span class="c">// une fois sur cinq. Un joueur humain progresse contre un adversaire faillible, pas</span>
+<span class="c">// contre un adversaire myope — et le taux est un paramètre, donc testable.</span>
+@riverpod
+MoveStrategy fallibleMoveStrategy(Ref ref) =&gt; FallibleMoveStrategy(
+  blunderRate: 0.2,
+  fallback: ref.watch(randomMoveStrategyProvider),
+  perfect: ref.watch(perfectMoveStrategyProvider),
+  random: ref.watch(randomProvider),
+);
+</code></pre>
+      </figure>
+
+      <figure>
+        <p class="fname"><b>scoreboard_data</b> lib/src/providers_internal.dart</p>
+<pre><code><span class="c">// La data source est interne. Son provider public, lui, sera typé avec l'interface du</span>
+<span class="c">// domaine — le nom `ScoreboardLocalDataSource` ne sort donc jamais de ce paquet.</span>
+@riverpod
+ScoreboardLocalDataSource scoreboardLocalDataSource(Ref ref) =&gt;
+    ScoreboardLocalDataSource(store: ref.watch(keyValueStoreProvider));
+</code></pre>
+      </figure>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <section id="public">
+      <div class="sec-head"><h2><code>providers</code> — ce que le paquet offre</h2></div>
+      <div class="stack">
+        <p>
+          L'API publique, et elle seule. Deux conventions valent d'être explicites, parce qu'elles se
+          jouent ici.
+        </p>
+        <p>
+          <strong>Une mutation s'expose comme une fonction nommée par un verbe, derrière un
+          typedef.</strong> Pas un notifier, pas un objet à méthodes : une fonction que l'appelant
+          appelle. Le typedef donne un nom au contrat et rend le remplacement possible.
+        </p>
+        <p>
+          <strong>Une valeur dérivée s'expose comme un provider ordinaire.</strong> On ne prend un
+          notifier que si quelque chose d'extérieur doit écrire l'état, ou pour posséder une durée de
+          vie.
+        </p>
+      </div>
+
+      <figure>
+        <p class="fname"><b>game_domain</b> lib/src/providers.dart</p>
+<pre><code>typedef ApplyMoveFun = MoveOutcome Function(Game game, int index);
+typedef ChooseCpuMoveFun = int Function(Game game);
+
+<span class="c">// `ref.read` et non `watch` : on résout la stratégie au moment de l'appel, pas à la</span>
+<span class="c">// construction du provider. C'est la règle pour tout ce qui vit dans un callback.</span>
+@riverpod
+ApplyMoveFun applyMove(Ref ref) =&gt; const ApplyMove().call;
+
+@riverpod
+ChooseCpuMoveFun chooseCpuMove(Ref ref) =&gt; (game) =&gt; ChooseMove(
+  easy: ref.read(randomMoveStrategyProvider),
+  hard: ref.read(perfectMoveStrategyProvider),
+  medium: ref.read(fallibleMoveStrategyProvider),
+).call(game);
+
+<span class="c">// LA porte d'entrée du paquet. La composition ne touche jamais providers_di.</span>
+List&lt;Override&gt; bindProviders({required ProviderListenable&lt;Random&gt; random}) =&gt; [
+  randomProvider.overrideWith((ref) =&gt; ref.watch(random)),
+];
+</code></pre>
+        <figcaption>
+          Noter ce qui <em>n'est pas</em> exporté : ni <code>MinimaxMoveStrategy</code>, ni
+          <code>ApplyMove</code>, ni le moindre symbole de <code>providers_di</code>. Le dehors voit
+          trois fonctions et une prise.
+        </figcaption>
+      </figure>
+
+      <figure>
+        <p class="fname"><b>scoreboard_data</b> lib/src/providers.dart</p>
+<pre><code><span class="c">// Le provider public est typé avec l'INTERFACE du domaine, pas avec la classe concrète.</span>
+<span class="c">// C'est ce qui empêche le nom de la data source de fuiter hors du paquet.</span>
+@riverpod
+ScoreboardRepository scoreboardRepositoryImpl(Ref ref) =&gt;
+    ref.watch(scoreboardLocalDataSourceProvider);
+
+<span class="c">// La data ne nourrit QUE ses propres contrats entrants. Elle n'appelle pas</span>
+<span class="c">// scoreboard_domain.bindProviders() — c'est la composition qui fait les deux, côte à</span>
+<span class="c">// côte, et qui décide donc quelle implémentation sert le domaine.</span>
+List&lt;Override&gt; bindProviders({required ProviderListenable&lt;KeyValueStore&gt; store}) =&gt; [
+  keyValueStoreProvider.overrideWith((ref) =&gt; ref.watch(store)),
+];
+</code></pre>
+      </figure>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <section id="catalogue">
+      <div class="sec-head"><h2>Les 20 providers, et ce que chacun fournit</h2></div>
+      <div class="stack">
+        <p>
+          Le catalogue complet, groupé par paquet puis par rôle dans le trio. Pour chacun : ce qu'il
+          contient, ce qu'il sert à faire, et qui le nourrit ou le lit — relevé sur le code.
+        </p>
+        <p>
+          Une chose à voir d'abord, parce qu'elle explique une partie du tableau : <strong>un provider
+          contient une valeur, et une fonction est une valeur</strong>. Quatre d'entre eux fournissent
+          donc une <em>fonction à appeler</em> plutôt qu'une donnée à lire, et deux fournissent un
+          notifier.
+        </p>
+      </div>
+      <div class="tree">
+        <div class="row hd"><div class="nm"><span class="lay dom">domain</span> game_domain</div><div class="rl"></div></div>
+        <div class="row dir"><div class="nm">ENTRANT · providers_di</div><div class="rl">lève tant que personne ne le nourrit</div></div>
+        <div class="row"><div class="nm">randomProvider<br><span style="color:var(--muted);font-size:0.9em">Random</span></div><div class="rl">La <strong>source d'aléa</strong>. Le domaine refuse d'appeler <code>Random()</code> lui-même : sans ça l'IA n'est pas reproductible.<br><span style="font-size:0.92em;color:var(--muted)">nourri par l'app (<code>Random()</code>) et par les tests (<code>Random(1)</code>)</span></div></div>
+        <div class="row dir"><div class="nm">INTERNE · providers_internal</div><div class="rl">jamais exporté</div></div>
+        <div class="row"><div class="nm">easyStrategyProvider<br><span style="color:var(--muted);font-size:0.9em">MoveStrategy</span></div><div class="rl">La stratégie <strong>aléatoire</strong> : une case libre au hasard.<br><span style="font-size:0.92em;color:var(--muted)">lu par le paquet seul</span></div></div>
+        <div class="row"><div class="nm">hardStrategyProvider<br><span style="color:var(--muted);font-size:0.9em">MoveStrategy</span></div><div class="rl">La stratégie <strong>parfaite</strong> : minimax alpha-bêta.<br><span style="font-size:0.92em;color:var(--muted)">lu par le paquet seul</span></div></div>
+        <div class="row"><div class="nm">mediumStrategyProvider<br><span style="color:var(--muted);font-size:0.9em">MoveStrategy</span></div><div class="rl">La stratégie <strong>faillible</strong> : la parfaite, qui se trompe une fois sur cinq.<br><span style="font-size:0.92em;color:var(--muted)">lu par le paquet seul</span></div></div>
+        <div class="row dir"><div class="nm">PUBLIC · providers.br</div><div class="rl">des fonctions, pas des objets</div></div>
+        <div class="row"><div class="nm">applyMoveProvider<br><span style="color:var(--muted);font-size:0.9em">ApplyMoveFun</span></div><div class="rl">La fonction qui <strong>applique un coup</strong> et rend <em>accepté</em> ou <em>rejeté avec un motif</em>. Le seul juge de la légalité.<br><span style="font-size:0.92em;color:var(--muted)">lu par game_presentation</span></div></div>
+        <div class="row"><div class="nm">chooseCpuMoveProvider<br><span style="color:var(--muted);font-size:0.9em">ChooseCpuMove</span></div><div class="rl">La fonction qui rend <strong>la case que joue la machine</strong>, en choisissant la stratégie d'après la difficulté de la partie.<br><span style="font-size:0.92em;color:var(--muted)">lu par game_presentation</span></div></div>
+      </div>
+      <div class="tree">
+        <div class="row hd"><div class="nm"><span class="lay pre">presentation</span> game_presentation</div><div class="rl"></div></div>
+        <div class="row dir"><div class="nm">ENTRANT · providers_di</div><div class="rl">deux qui lèvent, un qui proxie</div></div>
+        <div class="row"><div class="nm">gameRoutingProvider<br><span style="color:var(--muted);font-size:0.9em">GameRouting</span></div><div class="rl">Le <strong>port de navigation</strong>. <strong>Lève</strong> — on ne peut pas inventer une destination.<br><span style="font-size:0.92em;color:var(--muted)">nourri par l'app via <code>bindRoutingProvider</code></span></div></div>
+        <div class="row"><div class="nm">onGameFinishedProvider<br><span style="color:var(--muted);font-size:0.9em">OnGameFinished</span></div><div class="rl">Le <strong>port de sortie</strong> : la fonction à appeler quand une partie se termine. <strong>Lève</strong> — ne rien faire à la fin d'une partie est un bug, pas un défaut.<br><span style="font-size:0.92em;color:var(--muted)">nourri par l'app · <code>recordGameResultProvider</code></span></div></div>
+        <div class="row"><div class="nm">cpuMoveDelayProvider<br><span style="color:var(--muted);font-size:0.9em">Duration</span></div><div class="rl">La <strong>pause</strong> avant le coup de la machine. <strong>Proxie</strong> 350 ms, donc le brancher est facultatif.<br><span style="font-size:0.92em;color:var(--muted)">nourri par les tests · <code>Duration.zero</code></span></div></div>
+        <div class="row dir"><div class="nm">INTERNE · providers_internal</div><div class="rl">ce qui rend le contrat ci-dessus facultatif</div></div>
+        <div class="row dir"><div class="nm">PUBLIC · notifiers</div><div class="rl">le seul objet mutable de la feature</div></div>
+        <div class="row"><div class="nm">gameUiStateProvider<br><span style="color:var(--muted);font-size:0.9em">GameUiStateNotifier</span></div><div class="rl">L'<strong>état de l'écran</strong> : la partie, et si la machine réfléchit. Ses méthodes — <code>play</code>, <code>newGame</code> — sont ce que les widgets appellent.<br><span style="font-size:0.92em;color:var(--muted)">lu par les quatre widgets et l'écran · <strong>plus exporté</strong> hors du paquet</span></div></div>
+      </div>
+      <div class="tree">
+        <div class="row hd"><div class="nm"><span class="lay dom">domain</span> scoreboard_domain</div><div class="rl"></div></div>
+        <div class="row dir"><div class="nm">ENTRANT · providers_di</div><div class="rl"></div></div>
+        <div class="row"><div class="nm">scoreboardRepositoryProvider<br><span style="color:var(--muted);font-size:0.9em">ScoreboardRepository</span></div><div class="rl">L'<strong>accès au score</strong>, lire et écrire. <strong>Lève</strong> : on ne peut pas inventer une source de données.<br><span style="font-size:0.92em;color:var(--muted)">nourri par l'app, avec l'implémentation de la data</span></div></div>
+        <div class="row dir"><div class="nm">INTERNE · providers_internal</div><div class="rl"></div></div>
+        <div class="row"><div class="nm">recordMatchBehaviourProvider<br><span style="color:var(--muted);font-size:0.9em">RecordMatch</span></div><div class="rl">Le <strong>comportement</strong>, construit avec le repository du contrat. Le dehors n'obtient que le <em>résultat</em> de son appel, jamais l'objet.<br><span style="font-size:0.92em;color:var(--muted)">lu par le notifier</span></div></div>
+        <div class="row dir"><div class="nm">PUBLIC · notifiers + providers.br</div><div class="rl"></div></div>
+        <div class="row"><div class="nm">scoreboardProvider<br><span style="color:var(--muted);font-size:0.9em">ScoreboardNotifier</span></div><div class="rl">Le <strong>score</strong>, en <code>AsyncValue</code> — il vient d'une lecture asynchrone. Notifier parce que quelque chose d'extérieur l'écrit.<br><span style="font-size:0.92em;color:var(--muted)">lu par scoreboard_presentation</span></div></div>
+        <div class="row"><div class="nm">recordMatchProvider<br><span style="color:var(--muted);font-size:0.9em">RecordMatchFun</span></div><div class="rl">La fonction qui <strong>enregistre un résultat</strong> : elle lit, incrémente, fait persister.<br><span style="font-size:0.92em;color:var(--muted)">lu par l'app, à la fin d'une partie</span></div></div>
+      </div>
+      <div class="tree">
+        <div class="row hd"><div class="nm"><span class="lay dat">data</span> scoreboard_data</div><div class="rl"></div></div>
+        <div class="row dir"><div class="nm">ENTRANT · providers_di</div><div class="rl">le bas de la couche data</div></div>
+        <div class="row"><div class="nm">keyValueStoreProvider<br><span style="color:var(--muted);font-size:0.9em">KeyValueStore</span></div><div class="rl">Le <strong>stockage clé-valeur</strong>, deux méthodes. <strong>Lève</strong>. C'est ce qui garde <code>shared_preferences</code> au bord du monde.<br><span style="font-size:0.92em;color:var(--muted)">nourri par l'app · en test, une <code>Map</code></span></div></div>
+        <div class="row dir"><div class="nm">INTERNE · providers_internal</div><div class="rl"></div></div>
+        <div class="row"><div class="nm">scoreboardLocalDataSourceProvider<br><span style="color:var(--muted);font-size:0.9em">ScoreboardLocalDataSource</span></div><div class="rl">La <strong>data source</strong>, construite avec le stockage. Son nom ne sort pas du paquet.<br><span style="font-size:0.92em;color:var(--muted)">lu par le provider public ci-dessous</span></div></div>
+        <div class="row dir"><div class="nm">PUBLIC · providers.br</div><div class="rl"></div></div>
+        <div class="row"><div class="nm">scoreboardRepositoryImplProvider<br><span style="color:var(--muted);font-size:0.9em">ScoreboardRepository</span></div><div class="rl">L'<strong>implémentation</strong>, <em>typée avec l'interface du domaine</em>. C'est ce que l'app donne au contrat du domaine — l'inversion de dépendance en une ligne.<br><span style="font-size:0.92em;color:var(--muted)">lu par l'app</span></div></div>
+      </div>
+      <div class="tree">
+        <div class="row hd"><div class="nm"><span class="lay pre">presentation</span> scoreboard_presentation</div><div class="rl"></div></div>
+        <div class="row dir"><div class="nm">AUCUN FICHIER DE PROVIDERS</div><div class="rl">et c'est le comportement correct</div></div>
+        <div class="row"><div class="nm">—<br><span style="color:var(--muted);font-size:0.9em">—</span></div><div class="rl">Ce paquet ne reçoit <strong>rien</strong> de l'extérieur : il lit le score dans le domaine et les couleurs dans le <code>ColorScheme</code> de Flutter. Pas de contrat entrant ⇒ pas de prise ⇒ pas de fichier. Un fichier existe quand il a un contenu.<br><span style="font-size:0.92em;color:var(--muted)">trois fichiers en tout : le barrel et deux widgets</span></div></div>
+      </div>
+      <div class="tree">
+        <div class="row hd"><div class="nm"><span class="lay com">composition</span> app · composition</div><div class="rl"></div></div>
+        <div class="row dir"><div class="nm">LA CLOSURE QUI RELIE LES DEUX FEATURES</div><div class="rl"></div></div>
+        <div class="row"><div class="nm">appRouterProvider<br><span style="color:var(--muted);font-size:0.9em">AppRouter</span></div><div class="rl">L'instance unique du routeur, avec son <code>ref.onDispose</code>. Dans le graphe plutôt qu'en global : chaque <code>ProviderScope</code> de test repart d'une pile de navigation neuve.<br><span style="font-size:0.92em;color:var(--muted)">lu par le provider de config</span></div></div>
+        <div class="row"><div class="nm">routerConfigProvider<br><span style="color:var(--muted);font-size:0.9em">RouterConfig&lt;UrlState&gt;</span></div><div class="rl"><code>config()</code> appelé <strong>une seule fois</strong> et mémoïsé. L'appeler depuis <code>build</code> fabriquerait un delegate par frame, et la pile de navigation se réinitialiserait.<br><span style="font-size:0.92em;color:var(--muted)">lu par MaterialApp.router</span></div></div>
+        <div class="row"><div class="nm">recordGameResultProvider<br><span style="color:var(--muted);font-size:0.9em">OnGameFinished</span></div><div class="rl">La fonction qui <strong>traduit</strong> une fin de partie en <code>MatchResult</code> et l'enregistre. C'est elle que la composition branche sur le port du jeu — le seul point de contact des deux vocabulaires.<br><span style="font-size:0.92em;color:var(--muted)">branché sur <code>onGameFinishedProvider</code></span></div></div>
+      </div>
+      <div class="stack">
+        <h3>Cinq qui lèvent, un qui proxie</h3>
+        <p>
+          <code>randomProvider</code>, <code>gameRoutingProvider</code>,
+          <code>onGameFinishedProvider</code>, <code>scoreboardRepositoryProvider</code> et
+          <code>keyValueStoreProvider</code> <strong>lèvent</strong> tant que la composition ne les a
+          pas nourris. Un seul proxie une valeur interne : <code>cpuMoveDelayProvider</code>.
+        </p>
+        <p>
+          La règle qui départage n'est pas l'importance, c'est : <em>existe-t-il un défaut qui ait un
+          sens ?</em> Une pause de 350 ms, oui. Une source de données, une destination, une source
+          d'aléa : non — et un défaut silencieux y serait pire qu'un crash nommé.
+        </p>
+      </div>
+    </section>
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <section id="typedefs">
+      <div class="sec-head"><h2>Pourquoi une fonction derrière un <code>typedef</code></h2></div>
+      <div class="stack">
+        <p>
+          C'est le patron le moins évident du dépôt, et il n'a rien à voir avec Dart : c'est une
+          décision sur <strong>ce qu'un paquet laisse voir</strong>.
+        </p>
+      </div>
+
+      <h3>Le problème</h3>
+      <div class="stack">
+        <p>
+          La règle « appliquer un coup » vit dans une classe, <code>ApplyMove</code>, dans le domaine.
+          Un objet appelable : il a une méthode <code>call</code>, une dépendance injectée au
+          constructeur, et rien d'autre.
+        </p>
+      </div>
+
+      <figure>
+        <p class="fname">game_domain › behaviors/apply_move.dart — <b>pas exporté</b></p>
+<pre><code>class ApplyMove {
+  const ApplyMove({this.evaluateOutcome = const EvaluateOutcome()});
+
+  final EvaluateOutcome evaluateOutcome;
+
+  MoveOutcome call(Game game, {required Mark by, required int index}) { … }
+}</code></pre>
+      </figure>
+
+      <div class="stack">
+        <p>
+          La question est : comment la présentation s'en sert ? Trois réponses possibles, et deux
+          mauvaises.
+        </p>
+      </div>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th>Option</th><th>Ce que le consommateur reçoit</th><th>Le problème</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>exporter la classe</td>
+              <td><code>ApplyMove</code>, et il l'instancie</td>
+              <td>il choisit ses dépendances lui-même, donc l'injection ne sert plus à rien ; et le nom de la classe devient du contrat qu'on ne peut plus renommer</td>
+            </tr>
+            <tr>
+              <td>exposer l'<em>instance</em> par un provider</td>
+              <td>un objet <code>ApplyMove</code></td>
+              <td>il voit tous ses membres — <code>evaluateOutcome</code> compris — et peut s'y coupler ; la surface grandit à chaque champ ajouté</td>
+            </tr>
+            <tr>
+              <td><strong>exposer <code>.call</code></strong></td>
+              <td>une <strong>fonction</strong>, et rien de plus</td>
+              <td>aucun — c'est ce qu'on fait</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Ce que le provider expose</h3>
+      <figure>
+        <p class="fname">game_domain › providers.br.dart — exporté</p>
+<pre><code><span class="c">// Le TYPE de la fonction, nommé. Sans ça la signature du provider serait un</span>
+<span class="c">// `Function(Game, {required Mark by, required int index})` anonyme et illisible.</span>
+typedef ApplyMoveFun = MoveOutcome Function(Game game, {required Mark by, required int index});
+
+@riverpod
+ApplyMoveFun applyMove(Ref _) =&gt; const ApplyMove().call;
+<span class="c">//                                                 ^^^^ la méthode, PAS l'objet.</span>
+<span class="c">// `const ApplyMove()` est construit ici, avec ses dépendances, et jeté aussitôt :</span>
+<span class="c">// seule la référence à sa méthode sort du paquet.</span></code></pre>
+      </figure>
+
+      <div class="stack">
+        <p>Et à l'usage, ça se lit comme un appel de fonction :</p>
+      </div>
+
+      <figure>
+        <p class="fname">game_presentation › notifiers/game_ui_state_notifier.br.dart</p>
+<pre><code>final outcome = ref.read(applyMoveProvider)(state.game, by: state.game.humanMark, index: index);
+<span class="c">//              ^^^^^^^^^^^^^^^^^^^^^^^^^^ ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^</span>
+<span class="c">//              on récupère la fonction    on l'appelle</span></code></pre>
+        <figcaption>
+          Le notifier ne connaît ni <code>ApplyMove</code>, ni <code>EvaluateOutcome</code>, ni le
+          fait qu'il y ait une classe derrière. Il connaît un nom de provider et une signature.
+        </figcaption>
+      </figure>
+
+      <h3>Ce que le <code>typedef</code> achète, précisément</h3>
+      <ul class="plain">
+        <li><strong>Un nom pour le contrat.</strong> On peut l'écrire dans une signature, dans un champ, dans un paramètre de <code>bind*</code>. Un type fonction anonyme ne se réutilise pas.</li>
+        <li><strong>Une surface minimale.</strong> Une fonction n'a pas de membres. Le consommateur ne peut ni fouiller, ni hériter, ni se coupler à un détail.</li>
+        <li><strong>La liberté de restructurer.</strong> Tant que la signature tient, le domaine peut renommer la classe, changer ses dépendances, ou la remplacer par une closure — personne ne le voit.</li>
+        <li><strong>Un point de remplacement.</strong> En test, on surcharge le provider avec n'importe quelle fonction de la bonne forme. Pas de sous-classe à écrire.</li>
+      </ul>
+
+      <h3>Lire <code>ref.read(provider)(arguments)</code></h3>
+      <div class="stack">
+        <p>
+          Cette double parenthèse arrête tout le monde une première fois. Il n'y a pourtant aucune
+          syntaxe spéciale : ce sont <strong>deux opérations sans rapport</strong>, collées.
+        </p>
+      </div>
+
+      <figure>
+        <p class="fname">la même chose, dépliée</p>
+<pre><code><span class="c">// ── en deux temps ──────────────────────────────────────────────────</span>
+final RecordMatchFun recordMatch = ref.read(recordMatchProvider);  <span class="c">// 1. on RÉCUPÈRE</span>
+recordMatch(MatchResult.win);                                      <span class="c">// 2. on APPELLE</span>
+
+<span class="c">// ── en un seul, sans la variable intermédiaire ─────────────────────</span>
+ref.read(recordMatchProvider)(MatchResult.win);
+<span class="c">//  └──────── 1 ─────────┘└────── 2 ──────┘</span></code></pre>
+        <figcaption>
+          <code>ref.read(p)</code> rend <em>la valeur</em> du provider. Ici cette valeur se trouve
+          être une fonction — alors on l'appelle. Exactement comme <code>maListe[0]()</code> si la
+          liste contient des fonctions : les parenthèses ne « viennent » pas de Riverpod.
+        </figcaption>
+      </figure>
+
+      <div class="stack">
+        <p>
+          Ce qui fait vraiment cliquer, c'est de mettre les trois formes côte à côte. La différence
+          n'est pas dans <code>ref</code>, elle est dans <strong>ce que le provider contient</strong>.
+        </p>
+      </div>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th>Écriture</th><th>Ce que le provider contient</th><th>Ce qu'on obtient</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><code>ref.watch(p)</code></td>
+              <td>une donnée</td>
+              <td>la donnée — un <code>Board</code>, un <code>Scoreboard</code></td>
+            </tr>
+            <tr>
+              <td><code>ref.read(p.notifier)<wbr>.record(…)</code></td>
+              <td>un notifier</td>
+              <td>l'objet, puis on appelle <em>une de ses méthodes</em> — nommée</td>
+            </tr>
+            <tr>
+              <td><code>ref.read(p)(…)</code></td>
+              <td><strong>une fonction</strong></td>
+              <td>la fonction, qu'on appelle — <em>pas de nom de méthode, la valeur</em> est <em>la fonction</em></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="stack">
+        <p>
+          Et <code>read</code> plutôt que <code>watch</code> parce qu'on est dans un
+          <strong>callback</strong> : on veut la fonction au moment de l'appel, pas s'abonner à ses
+          changements. C'est la règle du dépôt — <code>watch</code> dans un corps de build ou de
+          provider, <code>read</code> dans une closure.
+        </p>
+      </div>
+
+      <div class="note">
+        <span class="lbl">Le cas réel est un cran plus long, et pour une bonne raison</span>
+        <p>
+          La composition ne peut pas écrire l'appel d'un seul jet, parce que
+          <code>toMatchResult</code> rend un <code>MatchResult?</code> — une partie <em>en cours</em>
+          n'a pas de résultat — alors que <code>RecordMatchFun</code> prend un
+          <code>MatchResult</code> non nullable. Le nul doit donc être écarté avant :
+        </p>
+      </div>
+
+      <figure>
+        <p class="fname">app › composition/game_result_recorder.dart — le vrai code</p>
+<pre><code>final recordGameResultProvider = Provider&lt;OnGameFinished&gt;(
+  (ref) =&gt; ({required humanMark, required outcome}) {
+    final result = outcome.toMatchResult(humanMark);
+    if (result == null) return;
+
+    <span class="c">// Une écriture locale qui échoue ne doit pas remonter en erreur non gérée</span>
+    <span class="c">// par-dessus le plateau.</span>
+    unawaited(ref.read(recordMatchProvider)(result));
+  },
+);</code></pre>
+        <figcaption>
+          Trois choses valent d'être vues ici : le <code>Provider&lt;OnGameFinished&gt;</code> qui
+          <em>fournit</em> une closure au port du domaine, le garde-fou sur le nullable, et
+          l'<code>unawaited</code> — la fonction rend un <code>Future</code> que personne n'attend,
+          et le dire explicitement vaut mieux que le laisser filer.
+        </figcaption>
+      </figure>
+
+      <h3><code>unawaited</code> — ce qu'il fait, et ce qu'il ne fait pas</h3>
+      <div class="stack">
+        <p>
+          Dans le code de la composition, l'appel est enveloppé :
+          <code>unawaited(ref.read(recordMatchProvider)(result))</code>. Pourquoi, et surtout : ça ne
+          fait pas ce qu'on croit.
+        </p>
+      </div>
+
+      <figure>
+        <p class="fname">dart:async · future.dart, ligne 1024 — tel quel</p>
+<pre><code>void unawaited(Future&lt;void&gt;? future) {}</code></pre>
+        <figcaption>
+          Un corps <strong>vide</strong>. À l'exécution, <code>unawaited</code> ne fait
+          <em>rien</em> — pas d'attente, pas de capture, pas de silence. Son seul effet est sur
+          l'analyseur.
+        </figcaption>
+      </figure>
+
+      <div class="stack">
+        <p>
+          Le problème qu'il résout : <code>recordMatch</code> rend un <code>Future</code>, et on ne
+          l'attend pas — le plateau n'a pas à patienter sur une écriture disque. Mais « un
+          <code>Future</code> ni attendu ni retourné » est aussi la signature d'un
+          <code>await</code> oublié, un bug classique. Les lints <code>unawaited_futures</code> et
+          <code>discarded_futures</code> le signalent donc. <code>unawaited</code> est la façon de
+          dire <em>« je sais, c'est voulu »</em>.
+        </p>
+        <p>
+          Ce qu'il <strong>ne</strong> fait pas, et c'est la partie contre-intuitive : il
+          n'intercepte pas l'erreur. Si l'écriture échoue, l'exception part en <em>erreur asynchrone
+          non gérée</em> vers le gestionnaire de la zone — exactement comme sans lui. La doc du SDK le
+          dit noir sur blanc à propos de <code>ignore()</code> : <em>« utilisez
+          <code>unawaited</code> […] cela garantit qu'une erreur inattendue est toujours
+          rapportée »</em>.
+        </p>
+      </div>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th>Écriture</th><th>Le lint</th><th>Une erreur dans le Future</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><code>maFonction();</code></td>
+              <td><strong>signalé</strong> — ressemble à un <code>await</code> oublié</td>
+              <td>remonte en erreur non gérée</td>
+            </tr>
+            <tr>
+              <td><code>await maFonction();</code></td>
+              <td>silencieux</td>
+              <td>propagée à l'appelant — mais l'écran attend</td>
+            </tr>
+            <tr>
+              <td><code>unawaited(maFonction());</code></td>
+              <td>silencieux</td>
+              <td><strong>remonte quand même</strong> — rien n'est avalé</td>
+            </tr>
+            <tr>
+              <td><code>maFonction().ignore();</code></td>
+              <td>silencieux</td>
+              <td><strong>jetée</strong> — plus personne n'en entend parler</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="note">
+        <span class="lbl">Pourquoi <code>unawaited</code> et pas <code>ignore</code> ici</span>
+        <p>
+          Les deux compilent, les deux taisent le lint. La différence est une décision de conception :
+          un tableau des scores qui <strong>cesse silencieusement de persister</strong> est un pire
+          défaut qu'une erreur rapportée. Avec <code>unawaited</code>, l'échec atterrit chez le
+          rapporteur d'erreurs — la console en debug, Crashlytics en production. Avec
+          <code>ignore()</code>, il disparaît. On garde donc <code>unawaited</code>, et le
+          commentaire du fichier dit exactement ça.
+        </p>
+      </div>
+
+      <div class="note">
+        <span class="lbl">Le suffixe <code>Fun</code>, et quand il tombe</span>
+        <p>
+          <code>ApplyMoveFun</code> porte ce suffixe parce que <code>ApplyMove</code> est déjà pris
+          par la classe, dans le même paquet — deux symboles ne peuvent pas partager un nom.
+          <code>ChooseCpuMove</code> ne l'a pas : la classe s'appelle <code>ChooseMove</code>, il n'y
+          a pas de collision, donc pas de suffixe. Le suffixe est une conséquence, pas une
+          convention à appliquer partout.
+        </p>
+      </div>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th>Le typedef</th><th>La classe derrière</th><th>Suffixe ?</th></tr></thead>
+          <tbody>
+            <tr><td><code>ApplyMoveFun</code></td><td><code>ApplyMove</code></td><td>oui — collision</td></tr>
+            <tr><td><code>ChooseCpuMove</code></td><td><code>ChooseMove</code></td><td>non</td></tr>
+            <tr><td><code>RecordMatchFun</code></td><td><code>RecordMatch</code></td><td>oui — collision</td></tr>
+            <tr><td><code>OnGameFinished</code></td><td><em>aucune</em> — c'est un port, la composition fournit la closure</td><td>non</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="stack">
+        <p>
+          Le dernier cas est le plus intéressant : <code>OnGameFinished</code> n'a <em>pas</em> de
+          classe derrière. C'est un typedef qui ne décrit rien de ce qui existe dans le paquet — juste
+          la forme de ce que quelqu'un d'autre devra fournir. Même mécanisme, sens inverse : ici le
+          typedef est une <strong>demande</strong>, pas une offre.
+        </p>
+      </div>
+      <h3>Le relevé : déclaré une fois, utilisé où ?</h3>
+      <div class="stack">
+        <p>
+          Quatre typedef dans le dépôt. Voici, pour chacun, son lieu de déclaration et
+          <strong>toutes</strong> ses occurrences — relevées par <code>grep</code>. Le résultat est
+          asymétrique, et l'asymétrie est le vrai enseignement.
+        </p>
+      </div>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th>Typedef</th><th>Déclaré</th><th>Signature</th></tr></thead>
+          <tbody>
+            <tr><td>ApplyMoveFun</td><td><code>game/domain › providers.br.dart:17</code></td><td><code>MoveOutcome Function(Game, {required Mark by, required int index})</code></td></tr>
+            <tr><td>ChooseCpuMove</td><td><code>game/domain › providers.br.dart:18</code></td><td><code>int Function(Game)</code></td></tr>
+            <tr><td>RecordMatchFun</td><td><code>scoreboard/domain › providers.br.dart:9</code></td><td><code>Future&lt;void&gt; Function(MatchResult)</code></td></tr>
+            <tr><td>OnGameFinished</td><td><code>game/presentation › on_game_finished.dart:5</code></td><td><code>void Function({required Mark humanMark, required GameOutcome outcome})</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="stack">
+        <p>
+          Note déjà le premier signal : les quatre premiers sont déclarés <strong>dans le fichier de
+          providers</strong>, collés aux providers qu'ils typent. Le cinquième a
+          <strong>son propre fichier</strong>. Ce n'est pas une coquetterie — c'est parce qu'il doit
+          être importable par des paquets qui n'ont rien à faire du reste.
+        </p>
+      </div>
+
+      <h3>Les trois « offres » : une seule utilisation, trois lignes plus bas</h3>
+
+      <figure>
+        <p class="fname">game_domain › providers.br.dart — déclaration et usage, à cinq lignes d'écart</p>
+<pre><code>typedef ApplyMoveFun = MoveOutcome Function(Game game, {required Mark by, required int index});
+typedef ChooseCpuMove = int Function(Game game);
+
+@riverpod
+ApplyMoveFun applyMove(Ref _) =&gt; const ApplyMove().call;
+
+@riverpod
+ChooseCpuMove chooseCpuMove(Ref ref) =&gt; ChooseMove(…).call;</code></pre>
+        <figcaption>
+          C'est <strong>tout</strong>. Chacun n'apparaît qu'une fois dans le code écrit : comme type
+          de retour de son propre provider. Idem pour <code>RecordMatchFun</code> dans
+          <code>scoreboard_domain</code>.
+        </figcaption>
+      </figure>
+
+      <div class="stack">
+        <p>
+          Un typedef utilisé une seule fois, à cinq lignes de sa déclaration — est-ce qu'il gagne sa
+          place ? Oui, mais pas pour la raison qu'on croit. Ce n'est pas la réutilisation. C'est ceci :
+        </p>
+      </div>
+
+      <figure>
+        <p class="fname">la même déclaration, sans le typedef</p>
+<pre><code><span class="c">// ce qu'il faudrait écrire</span>
+@riverpod
+MoveOutcome Function(Game, {required Mark by, required int index}) applyMove(Ref _) =&gt;
+    const ApplyMove().call;
+
+<span class="c">// et le jour où la signature change, il faut la retrouver au milieu de ça.</span></code></pre>
+      </figure>
+
+      <div class="stack">
+        <p>
+          Et surtout, il y a un <em>deuxième</em> lieu d'utilisation que le <code>grep</code> sur le
+          code écrit ne montre pas : <strong>le fichier généré</strong>. Le générateur reprend le type
+          six fois par provider.
+        </p>
+      </div>
+
+      <figure>
+        <p class="fname">game_domain › providers.br.g.dart — généré, ligne 15</p>
+<pre><code>final class ApplyMoveProvider extends $FunctionalProvider&lt;ApplyMoveFun, ApplyMoveFun, ApplyMoveFun&gt;
+    with $Provider&lt;ApplyMoveFun&gt; {</code></pre>
+        <figcaption>
+          Sans le typedef, le type fonction complet serait recopié là six fois. Le typedef n'est donc
+          pas utilisé « une fois » : il est utilisé une fois <em>à la main</em>, et six fois par la
+          machine.
+        </figcaption>
+      </figure>
+
+      <div class="note">
+        <span class="lbl">Et chez le consommateur, jamais</span>
+        <p>
+          Relevé : <code>ApplyMoveFun</code>, <code>ChooseCpuMove</code> et
+          <code>RecordMatchFun</code> <strong>n'apparaissent dans aucun fichier de présentation ni de
+          composition</strong>. Le consommateur écrit
+          <code>ref.read(applyMoveProvider)(…)</code> et le type est <em>inféré</em>. Il ne l'épelle
+          jamais — mais c'est lui que l'analyseur affiche au survol, lui qu'une variable
+          intermédiaire porterait, et lui qu'une surcharge de test doit respecter. Un type qu'on ne
+          nomme pas doit quand même avoir un nom.
+        </p>
+      </div>
+
+      <h3><code>OnGameFinished</code> : quatre lieux, trois paquets</h3>
+      <div class="stack">
+        <p>
+          Le quatrième est d'une autre nature, et c'est là que le typedef devient
+          <strong>structurant</strong> plutôt que confortable : trois paquets doivent s'accorder sur
+          une forme, et aucun ne connaît les deux autres.
+        </p>
+      </div>
+
+      <figure>
+        <p class="fname"><b>figure 7</b> un seul type, quatre rôles</p>
+        <div class="plate">
+<pre><code>  <span class="k">game_presentation</span> › on_game_finished.dart:5
+     typedef OnGameFinished = void Function({required Mark humanMark,
+                                             required GameOutcome outcome});
+        │
+        │  <span class="c">la FORME. Un fichier à elle seule, pour être importable sans le reste.</span>
+        │
+        ├──▶ providers_di.br.dart:11        <span class="k">LE CONTRAT</span>
+        │      OnGameFinished onGameFinished(Ref _) =&gt; throw Unregistered…;
+        │      <span class="c">« j'ai besoin d'une fonction de cette forme, et je lève sans elle »</span>
+        │
+        ├──▶ providers.dart:8               <span class="k">LA PRISE</span>
+        │      bindProviders({required ProviderListenable&lt;OnGameFinished&gt; onGameFinished})
+        │      <span class="c">« voilà par où me la donner » — le type est dans la signature publique</span>
+        │
+        ├──▶ app › game_result_recorder.dart:22   <span class="k">LA FOURNITURE</span>
+        │      final recordGameResultProvider = Provider&lt;OnGameFinished&gt;(…);
+        │      <span class="c">la composition écrit une closure de cette forme, et la branche</span>
+        │
+        └──▶ test/support/harness.dart:15   <span class="k">LE DOUBLE</span>
+               OnGameFinished get port =&gt; ({required humanMark, required outcome}) =&gt; …
+               <span class="c">le test en fournit une autre, qui enregistre au lieu de persister</span>
+
+  Aucun de ces quatre fichiers n'importe les trois autres.
+  Le typedef est leur seul terrain commun.
+</code></pre>
+        </div>
+      </figure>
+
+      <div class="stack">
+        <p>
+          C'est la différence de fond. Les trois premiers <strong>décrivent ce qu'un paquet
+          offre</strong> : ils sont déclarés là où la fonction existe, et le consommateur n'a qu'à
+          appeler. <code>OnGameFinished</code> <strong>décrit ce qu'un paquet demande</strong> : il
+          est déclaré par celui qui n'a rien, et c'est le nom du type qui permet à quatre endroits
+          étrangers de produire la même forme.
+        </p>
+        <p>
+          D'où la règle pratique : <strong>un typedef d'offre peut vivre dans le fichier de
+          providers ; un typedef de demande mérite son propre fichier</strong>, parce qu'il sera
+          importé par des gens qui ne veulent pas du reste.
+        </p>
+      </div>
+      <div class="note stop">
+        <span class="lbl">« Offre », « demande », « contrat » : trois mots, deux choses</span>
+        <p>
+          Attention au piège de vocabulaire — le mien. Dans tout ce document,
+          <strong>« contrat » a un sens étroit</strong> : une entrée de <code>providers_di</code> qui
+          <em>lève</em> jusqu'à ce qu'un <code>bind*</code> la nourrisse. Le typedef, lui, n'est
+          jamais ça. <strong>Le typedef est la forme ; le contrat est le provider qui lève.</strong>
+        </p>
+        <p>
+          Les deux se confondent pour <code>OnGameFinished</code> uniquement parce qu'ils sont écrits
+          à deux lignes d'écart. Pour les quatre autres, il n'y a pas de contrat du tout : le domaine
+          fournit la fonction, personne n'a rien à lui donner.
+        </p>
+      </div>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th></th><th><code>ApplyMoveFun</code></th><th><code>OnGameFinished</code></th></tr></thead>
+          <tbody>
+            <tr><td>un type qui nomme une forme</td><td>oui</td><td>oui</td></tr>
+            <tr><td>une entrée <code>providers_di</code> qui <strong>lève</strong></td><td><strong>non</strong></td><td>oui — <code>onGameFinishedProvider</code></td></tr>
+            <tr><td>un paramètre de <code>bind*</code></td><td><strong>non</strong></td><td>oui</td></tr>
+            <tr><td>quelqu'un doit le nourrir</td><td><strong>non</strong></td><td>oui, ou l'app crashe au premier coup gagnant</td></tr>
+            <tr><td>sens</td><td>le paquet <strong>fournit</strong></td><td>le paquet <strong>réclame</strong></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="stack">
+        <p>
+          Le typedef dit <em>quelle forme</em> ; le contrat dit <em>qui la doit à qui</em>. Pour
+          <code>ApplyMoveFun</code> la seconde question ne se pose pas — le domaine a écrit la
+          fonction, il ne l'attend de personne. C'est ce qui décide, très concrètement, s'il faut un
+          <code>bind*</code> ou pas.
+        </p>
+        <p>
+          Au sens large, bien sûr, <code>ApplyMoveFun</code> <em>est</em> un contrat : changer sa
+          signature casse ses consommateurs, c'est un engagement d'API. Mais ce n'est pas
+          « <strong>un</strong> contrat » au sens du dépôt, et confondre les deux fait écrire des
+          <code>bind*</code> pour des choses que personne n'a à fournir.
+        </p>
+      </div>
+
+
+    </section>
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <section id="bind">
+      <div class="sec-head"><h2>Les fonctions <code>bind*</code>, et qui appelle qui</h2></div>
+      <div class="stack">
+        <p>
+          Un <code>bind*</code> rend une liste d'<code>Override</code> Riverpod. La composition les
+          étale toutes dans un <code>ProviderScope</code>, et c'est le seul endroit du dépôt où les
+          six paquets se croisent.
+        </p>
+        <p>
+          L'ensemble est <strong>fermé</strong> : un nouveau contrat devient un <em>paramètre</em> de
+          la fonction existante, jamais une nouvelle fonction. Inventer un
+          <code>bindGameOverProviders()</code> découperait une couture unique en plusieurs que la
+          composition devrait découvrir — et le nom ne dirait rien de plus que le nom du paramètre.
+        </p>
+      </div>
+
+      <figure>
+        <p class="fname"><b>apps/tictactoe</b> lib/src/composition/providers.dart</p>
+<pre><code>ProviderScope(
+  overrides: [
+    <span class="c">// ── ce que le monde extérieur fournit ──────────────────────────────</span>
+    ...game_domain.bindProviders(random: Provider((_) =&gt; Random())),
+    ...scoreboard_data.bindProviders(store: sharedPreferencesStoreProvider),
+
+    <span class="c">// ── l'inversion de dépendance, en une ligne ────────────────────────</span>
+    <span class="c">// La composition prend l'implémentation exposée par la data et la donne au</span>
+    <span class="c">// domaine. Ni l'un ni l'autre ne connaît son vis-à-vis.</span>
+    ...scoreboard_domain.bindProviders(
+      repository: scoreboard_data.scoreboardRepositoryImplProvider,
+    ),
+
+    <span class="c">// ── le pont entre les deux features ────────────────────────────────</span>
+    <span class="c">// La traduction vit dans recordGameResultProvider, dans le fichier voisin.</span>
+    <span class="c">// `game` ignore MatchResult, `scoreboard` ignore GameOutcome, et cette closure</span>
+    <span class="c">// est leur seul point de contact.</span>
+    ...game_presentation.bindProviders(onGameFinished: recordGameResultProvider),
+  ],
+  child: const TicTacToeApp(),
+)
+</code></pre>
+        <figcaption>
+          Ce bloc <em>est</em> l'architecture, rendue lisible en vingt lignes. Un relecteur qui ne
+          lit que ce fichier sait déjà qui dépend de qui.
+        </figcaption>
+      </figure>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th>Fonction</th><th>Nourrit</th><th>Appelée par</th></tr></thead>
+          <tbody>
+            <tr><td><code>game_domain<wbr>.bindProviders</code></td><td>la source d'aléa</td><td>la composition</td></tr>
+            <tr><td><code>game_presentation<wbr>.bindProviders</code></td><td>le port de fin de partie (requis) et le thème (optionnel)</td><td>la composition</td></tr>
+            <tr><td><code>scoreboard_data<wbr>.bindProviders</code></td><td>le stockage clé-valeur</td><td>la composition</td></tr>
+            <tr><td><code>scoreboard_domain<wbr>.bindProviders</code></td><td>le repository, avec l'implémentation de la data</td><td>la composition</td></tr>
+            <tr><td><code>scoreboard_presentation<wbr>.bindProviders</code></td><td>le thème (optionnel)</td><td>la composition</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <section id="tracabilite">
+      <div class="sec-head"><h2>Couche par couche : ce qui entre, ce qui sort, et qui consomme</h2></div>
+      <div class="stack">
+        <p>
+          Relevé par <code>grep</code> sur le dépôt : pour chaque symbole public, qui le nourrit s'il
+          est <strong>entrant</strong>, et qui l'utilise réellement s'il est <strong>sortant</strong>.
+          C'est le tableau qui rend l'architecture vérifiable au lieu de descriptive.
+        </p>
+      </div>
+      <div class="tree">
+        <div class="row hd"><div class="nm"><span class="lay dom">domain</span> game_domain</div><div class="rl">Dart pur · dépend de rien</div></div>
+        <div class="row dir"><div class="nm">symbole</div><div class="rl">qui le nourrit · qui le consomme</div></div>
+        <div class="row"><div class="nm">Random<br><span style="color:var(--muted);font-size:0.9em">◂ entrant</span></div><div class="rl"><strong>l'APP — <code>Provider((_) =&gt; Random())</code></strong><br>en test : <code>Random(1)</code>, une graine fixe</div></div>
+        <div class="row"><div class="nm">Mark, Board, Game<br><span style="color:var(--muted);font-size:0.9em">sortant ▸</span></div><div class="rl"><strong>game_presentation</strong><br>le vocabulaire, rendu par les widgets</div></div>
+        <div class="row"><div class="nm">Difficulty<br><span style="color:var(--muted);font-size:0.9em">sortant ▸</span></div><div class="rl"><strong>game_presentation</strong><br>lu par le sélecteur de niveau</div></div>
+        <div class="row"><div class="nm">GameOutcome<br><span style="color:var(--muted);font-size:0.9em">sortant ▸</span></div><div class="rl"><strong>game_presentation, <strong>l'APP</strong></strong><br>l'APP le lit pour le traduire en MatchResult</div></div>
+        <div class="row"><div class="nm">WinningLine<br><span style="color:var(--muted);font-size:0.9em">sortant ▸</span></div><div class="rl"><strong><em>personne directement</em></strong><br>il voyage <em>dans</em> GameOutcome.win — exporté pour être nommable</div></div>
+        <div class="row"><div class="nm">MoveOutcome, MoveRejection<br><span style="color:var(--muted);font-size:0.9em">sortant ▸</span></div><div class="rl"><strong>game_presentation</strong><br>le notifier filtre sur <code>MoveAccepted</code></div></div>
+        <div class="row"><div class="nm">ApplyMoveFun, ChooseCpuMove<br><span style="color:var(--muted);font-size:0.9em">sortant ▸</span></div><div class="rl"><strong><em>jamais épelés</em></strong><br>types de retour des deux providers ; le consommateur les laisse inférer</div></div>
+        <div class="row"><div class="nm">applyMoveProvider<br><span style="color:var(--muted);font-size:0.9em">sortant ▸</span></div><div class="rl"><strong>game_presentation</strong><br>le notifier applique le coup humain et celui du CPU</div></div>
+        <div class="row"><div class="nm">chooseCpuMoveProvider<br><span style="color:var(--muted);font-size:0.9em">sortant ▸</span></div><div class="rl"><strong>game_presentation</strong><br>le notifier demande le coup de la machine</div></div>
+      </div>
+      <div class="tree">
+        <div class="row hd"><div class="nm"><span class="lay pre">presentation</span> game_presentation</div><div class="rl">dépend de game_domain, Flutter et auto_route · jamais de data</div></div>
+        <div class="row dir"><div class="nm">symbole</div><div class="rl">qui le nourrit · qui le consomme</div></div>
+        <div class="row"><div class="nm">GameRouting<br><span style="color:var(--muted);font-size:0.9em">◂ entrant</span></div><div class="rl"><strong>l'APP — <code>AppGameRouting</code></strong><br><strong>lève</strong> · nourri par <code>bindRoutingProvider</code>, sa propre fonction</div></div>
+        <div class="row"><div class="nm">OnGameFinished<br><span style="color:var(--muted);font-size:0.9em">◂ entrant</span></div><div class="rl"><strong>l'APP — <code>recordGameResultProvider</code></strong><br><strong>lève</strong> si personne ne le nourrit</div></div>
+        <div class="row"><div class="nm">Duration (délai CPU)<br><span style="color:var(--muted);font-size:0.9em">◂ entrant</span></div><div class="rl"><strong>les tests — <code>Duration.zero</code></strong><br>proxie 350 ms en production</div></div>
+        <div class="row"><div class="nm">GameScreen<br><span style="color:var(--muted);font-size:0.9em">sortant ▸</span></div><div class="rl"><strong>l'APP</strong><br>monté dans le corps, par <code>HomeScreen</code></div></div>
+        <div class="row"><div class="nm">DifficultyMenuButton<br><span style="color:var(--muted);font-size:0.9em">sortant ▸</span></div><div class="rl"><strong>l'APP</strong><br>posé dans <code>AppBar.actions</code> — la feature le fournit parce qu'elle seule lit le niveau courant</div></div>
+        <div class="row"><div class="nm">GameRoute<br><span style="color:var(--muted);font-size:0.9em">sortant ▸</span></div><div class="rl"><strong>l'APP</strong><br>généré depuis <code>@RoutePage</code> ; la composition le place dans son arbre</div></div>
+        <div class="row"><div class="nm">OnGameFinished<br><span style="color:var(--muted);font-size:0.9em">sortant ▸</span></div><div class="rl"><strong>l'APP</strong><br>exporté pour que la composition puisse écrire une closure de cette forme</div></div>
+      </div>
+      <div class="tree">
+        <div class="row hd"><div class="nm"><span class="lay dom">domain</span> scoreboard_domain</div><div class="rl">Dart pur · ignore tout du morpion</div></div>
+        <div class="row dir"><div class="nm">symbole</div><div class="rl">qui le nourrit · qui le consomme</div></div>
+        <div class="row"><div class="nm">ScoreboardRepository<br><span style="color:var(--muted);font-size:0.9em">◂ entrant</span></div><div class="rl"><strong>l'APP — qui lui passe l'impl de la data</strong><br><strong>lève</strong> si personne ne le nourrit</div></div>
+        <div class="row"><div class="nm">MatchResult<br><span style="color:var(--muted);font-size:0.9em">sortant ▸</span></div><div class="rl"><strong>l'<strong>APP</strong>, scoreboard_presentation</strong><br>l'APP le produit, les tuiles le lisent</div></div>
+        <div class="row"><div class="nm">Scoreboard<br><span style="color:var(--muted);font-size:0.9em">sortant ▸</span></div><div class="rl"><strong>scoreboard_data</strong><br>la data mappe son DTO vers lui</div></div>
+        <div class="row"><div class="nm">ScoreboardRepository<br><span style="color:var(--muted);font-size:0.9em">sortant ▸</span></div><div class="rl"><strong>scoreboard_data</strong><br>l'interface que la data <code>implements</code></div></div>
+        <div class="row"><div class="nm">scoreboardProvider<br><span style="color:var(--muted);font-size:0.9em">sortant ▸</span></div><div class="rl"><strong>scoreboard_presentation</strong><br>chaque tuile <code>select</code> son compteur</div></div>
+        <div class="row"><div class="nm">recordMatchProvider<br><span style="color:var(--muted);font-size:0.9em">sortant ▸</span></div><div class="rl"><strong>l'<strong>APP</strong></strong><br>appelé à la fin d'une partie</div></div>
+      </div>
+      <div class="tree">
+        <div class="row hd"><div class="nm"><span class="lay dat">data</span> scoreboard_data</div><div class="rl">dépend de scoreboard_domain · pas de Flutter</div></div>
+        <div class="row dir"><div class="nm">symbole</div><div class="rl">qui le nourrit · qui le consomme</div></div>
+        <div class="row"><div class="nm">KeyValueStore<br><span style="color:var(--muted);font-size:0.9em">◂ entrant</span></div><div class="rl"><strong>l'APP — <code>SharedPreferencesStore</code></strong><br><strong>lève</strong> · en test, une <code>Map</code></div></div>
+        <div class="row"><div class="nm">KeyValueStore<br><span style="color:var(--muted);font-size:0.9em">sortant ▸</span></div><div class="rl"><strong>l'APP</strong><br>exporté pour que la composition puisse l'implémenter</div></div>
+        <div class="row"><div class="nm">scoreboardRepositoryImplProvider<br><span style="color:var(--muted);font-size:0.9em">sortant ▸</span></div><div class="rl"><strong>l'<strong>APP</strong></strong><br>typé avec l'interface du domaine — le nom de la data source ne sort pas</div></div>
+      </div>
+      <div class="tree">
+        <div class="row hd"><div class="nm"><span class="lay pre">presentation</span> scoreboard_presentation</div><div class="rl">dépend de scoreboard_domain · aucun contrat entrant</div></div>
+        <div class="row dir"><div class="nm">symbole</div><div class="rl">qui le nourrit · qui le consomme</div></div>
+        <div class="row"><div class="nm">ScoreboardWidget<br><span style="color:var(--muted);font-size:0.9em">sortant ▸</span></div><div class="rl"><strong>l'APP</strong><br>le seul symbole du barrel</div></div>
+      </div>
+      <div class="stack">
+        <h3>Trois choses que ce relevé révèle</h3>
+        <p>
+          <strong>Un symbole exporté sans consommateur direct n'est pas forcément une erreur.</strong>
+          <code>WinningLine</code> n'apparaît nulle part chez les voisins, mais il <em>voyage dans</em>
+          <code>GameOutcome.win</code> : on ne peut pas consommer une victoire sans pouvoir nommer sa
+          ligne. Idem pour les deux typedef, que le consommateur laisse toujours inférer.
+        </p>
+        <p>
+          <strong>Ce qui n'était pas nécessaire a été retiré.</strong> Un précédent relevé comptait
+          27 symboles publics ; il en reste <strong>19</strong>. Trois exports ont sauté — l'état
+          d'écran de <code>game_presentation</code>, la tuile de
+          <code>scoreboard_presentation</code>, et un provider d'évaluation que seuls ses tests
+          lisaient — et un est arrivé avec la refonte visuelle,
+          <code>DifficultyMenuButton</code>, parce que l'app doit pouvoir poser le sélecteur de
+          niveau dans sa barre. Un barrel est un fichier de refus autant que d'export.
+        </p>
+        <p>
+          <strong>L'APP apparaît exactement là où elle doit.</strong> Elle consomme
+          <code>GameOutcome</code> et <code>Mark</code> d'un côté, <code>MatchResult</code> et
+          <code>recordMatchProvider</code> de l'autre, plus les deux widgets, la route et les trois
+          ports. Et surtout : c'est le <em>seul</em> nom qui apparaisse dans les deux moitiés du
+          tableau.
+        </p>
+      </div>
+    </section>
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <section id="widgets">
+      <div class="sec-head"><h2>Les widgets : où ils vivent, et qui les monte</h2></div>
+      <div class="stack">
+        <p>
+          Quinze widgets dans trois paquets, dont quatre privés. Trois seulement sont créés par la
+          composition — et c'est
+          toute la frontière : l'app monte une <em>façade</em> par feature, jamais un widget interne.
+        </p>
+      </div>
+
+      <figure>
+        <p class="fname"><b>figure 6</b> la chaîne de montage, de runApp jusqu'à une case</p>
+        <div class="plate">
+<pre><code>  <span class="k">app</span>       main.dart
+                └─▶ TicTacToeApp                app › app.dart
+                      │  <span class="c">ConsumerWidget · MaterialApp.router</span>
+                      │  <span class="c">routerConfig: ref.watch(routerConfigProvider)</span>
+                      └─▶ AppRouter             app › routing/app_router.br.dart
+                            │  <span class="c">un seul AutoRoute : '/' → HomeRoute</span>
+                            └─▶ HomePage        <span class="c">adaptateur de routage</span>
+                                  └─▶ HomeScreen        app › home_screen.dart
+                                        │  <span class="c">le seul fichier qui nomme les deux features</span>
+                                        │
+                    ┌───────────────────┴───────────────────┐
+                    ▼                                       ▼
+  <span class="k">scoreboard</span>  ScoreboardWidget                              <span class="k">game</span>  GameScreen
+                    │  <span class="c">StatelessWidget</span>                      │  <span class="c">StatelessWidget</span>
+                    │                                       │
+                    └─▶ ScoreTile ×3                        ├─▶ BoardWidget
+                         <span class="c">ConsumerWidget</span>                     │     └─▶ CellWidget ×9
+                         <span class="c">watch son compteur</span>                 │          <span class="c">ConsumerStatefulWidget, const</span>
+                                                            │          <span class="c">watch SA case · bump au tap</span>
+                                                            ├─▶ StatusBanner
+                                                            │     <span class="c">watch la phrase</span>
+                                                            └─▶ _NewGameButton <span class="c">privé</span>
+
+  <span class="k">app</span>       AppBar.actions
+                └─▶ DifficultyMenuButton      <span class="k">game</span>  <span class="c">exporté par la feature</span>
+                      └─▶ _MenuRow ×3               <span class="c">privé</span>
+                      <span class="c">l'app pose le bouton, la feature possède l'état du niveau</span>
+
+  ── frontière de paquet ──   l'app ne franchit JAMAIS le premier niveau
+</code></pre>
+        </div>
+        <figcaption>
+          Deux niveaux appartiennent au routage — <code>AppRouter</code> décide de la topologie,
+          <code>HomePage</code> adapte la route en widget — puis <code>HomeScreen</code> monte deux
+          façades et s'arrête là. Les sept widgets restants sont montés par leur propre feature,
+          dont deux privés, invisibles hors de leur fichier.
+        </figcaption>
+      </figure>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th>Widget</th><th>Type</th><th>Monté par</th><th>Ce qu'il observe</th></tr></thead>
+          <tbody>
+            <tr><td>TicTacToeApp</td><td><strong>Consumer</strong></td><td><code>main.dart</code></td><td><code>routerConfigProvider</code> — un objet qui ne change jamais</td></tr>
+            <tr><td>HomePage</td><td>Stateless</td><td><strong>AppRouter</strong>, via <code>HomeRoute.page</code></td><td>rien — adaptateur de routage</td></tr>
+            <tr><td>HomeScreen</td><td>Stateless</td><td>HomePage</td><td>rien</td></tr>
+            <tr><td>GamePage</td><td>Stateless</td><td><em>personne</em> — voir la note</td><td>rien — adaptateur de routage</td></tr>
+            <tr><td>GameScreen</td><td>Stateless</td><td><strong>l'app</strong></td><td>rien — il place, il n'observe pas</td></tr>
+            <tr><td>BoardWidget</td><td>Stateless</td><td>GameScreen</td><td>rien — un coup ne l'atteint pas</td></tr>
+            <tr><td>CellWidget</td><td><strong>ConsumerStateful</strong></td><td>BoardWidget, ×9</td><td><code>(markAt(i), isWinning(i))</code> — un record, une souscription</td></tr>
+            <tr><td>StatusBanner</td><td><strong>Consumer</strong></td><td>GameScreen</td><td>la phrase à afficher, projetée en <code>String</code></td></tr>
+            <tr><td>DifficultyMenuButton</td><td><strong>Consumer</strong></td><td><strong>l'app</strong>, dans <code>AppBar.actions</code></td><td>la difficulté courante</td></tr>
+            <tr><td>_NewGameButton</td><td><strong>Consumer</strong></td><td>GameScreen · <em>privé</em></td><td>la difficulté, pour relancer à l'identique</td></tr>
+            <tr><td>ScoreboardWidget</td><td>Stateless</td><td><strong>l'app</strong></td><td>rien</td></tr>
+            <tr><td>ScoreTile</td><td><strong>Consumer</strong></td><td>ScoreboardWidget, ×3</td><td><code>countOf(result)</code> — un <code>int</code></td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>La règle que ce tableau montre</h3>
+      <div class="stack">
+        <p>
+          Regarde la colonne « ce qu'il observe » : <strong>tous les widgets qui n'observent rien sont
+          des <code>StatelessWidget</code>, et tous ceux qui observent sont des feuilles</strong>. Ce
+          n'est pas une coïncidence, c'est la règle appliquée : <em>le widget qui souscrit est celui
+          qui dessine la valeur</em>.
+        </p>
+        <p>
+          D'où la propriété qui compte : jouer un coup redessine <strong>une case</strong> et la
+          bannière. Pas le plateau, pas l'écran, pas le tableau des scores. Un
+          <code>GameScreen</code> qui aurait lu l'état pour le passer à ses enfants aurait tout
+          reconstruit à chaque coup — et ses enfants n'auraient plus pu être <code>const</code>.
+        </p>
+      </div>
+
+      <figure>
+        <p class="fname">game_presentation › widgets/cell_widget.dart</p>
+<pre><code>class CellWidget extends ConsumerWidget {
+  const CellWidget({required this.index, super.key});   <span class="c">// un INDEX, pas un Mark</span>
+
+  final int index;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final (mark, isWinning) = ref.watch(
+      gameUiStateProvider.select((state) =&gt; (state.markAt(index), state.isWinning(index))),
+    );
+    …</code></pre>
+        <figcaption>
+          Il prend un <code>int</code>, ce qui rend le site d'appel <code>const</code> — donc
+          <code>BoardWidget</code> peut lister ses neuf cases une fois pour toutes. Et les deux valeurs
+          arrivent par <em>un seul</em> <code>select</code> qui rend un <em>record</em> : les records
+          ont une égalité structurelle, donc une souscription couvre les deux sans se déclencher sur le
+          reste de l'état.
+        </figcaption>
+      </figure>
+
+      <div class="note">
+        <span class="lbl">Où sont les widgets, littéralement</span>
+        <p>
+          Huit dans <code>game/presentation/lib/src/</code> — cinq sous <code>widgets/</code>, deux
+          dans <code>screens/game_screen.dart</code> dont un privé, et <code>GamePage</code> sous
+          <code>routing/</code>. Deux dans <code>scoreboard/presentation/lib/src/widgets/</code>.
+          Quatre dans <code>apps/tictactoe/lib/src/</code>. <strong>Zéro dans un paquet
+          <code>domain</code> ou <code>data</code></strong> — ils ne dépendent même pas de Flutter,
+          ils ne pourraient pas.
+        </p>
+      </div>
+
+      <div class="note">
+        <span class="lbl">Pourquoi la case est le seul widget à état</span>
+        <p>
+          <code>CellWidget</code> est passé de <code>ConsumerWidget</code> à
+          <code>ConsumerStatefulWidget</code> pour une seule raison : il possède un
+          <code>AnimationController</code> — le rebond au tap. C'est exactement ce que la règle
+          maison appelle le bon usage d'une classe de widget : <em>quelque chose à posséder</em>.
+        </p>
+        <p>
+          Le contrôleur est tiré de deux endroits — le tap, et l'arrivée d'un symbole que le joueur
+          n'a pas posé (le coup de la machine, qui n'a pas de tap). Le garde
+          <code>!_bump.isAnimating</code> empêche le second de couper le premier. L'animation est
+          <strong>one-shot et se termine sur 1.0</strong> : une animation qui boucle ferait expirer
+          <code>pumpAndSettle</code> dans les tests de widget.
+        </p>
+      </div>
+
+      <div class="note">
+        <span class="lbl">GameRoute est déclarée, et l'app ne la place pas</span>
+        <p>
+          <code>game_presentation</code> offre <strong>deux</strong> façons d'être consommé : une
+          route (<code>GameRoute</code>, via <code>@RoutePage</code>) et une façade widget
+          (<code>GameScreen</code>). L'app a pris la seconde — <code>HomeScreen</code> monte
+          <code>GameScreen</code> comme un widget, et <code>AppRouter</code> ne place que
+          <code>HomeRoute</code>.
+        </p>
+        <p>
+          C'est volontairement conservé, parce que c'est la démonstration littérale de la règle : la
+          feature <em>déclare</em> ce qu'elle sait faire, la composition <em>décide</em> de la forme.
+          Un écran unique n'a nulle part où naviguer, donc la décision tombe du côté widget. Le jour
+          où le jeu devient une destination, <code>GameRoute</code> est déjà là et seul
+          <code>app_router.br.dart</code> change.
+        </p>
+      </div>
+    </section>
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <section id="plateau">
+      <div class="sec-head"><h2>Le plateau, et les huit façons de gagner</h2></div>
+      <div class="stack">
+        <p>
+          Neuf cases, indexées de 0 à 8 en lecture, gauche à droite puis de haut en bas. Un seul
+          indice entier suffit donc à désigner un coup — pas de couple ligne/colonne à trimballer, et
+          les huit alignements deviennent huit triplets constants.
+        </p>
+      </div>
+
+      <div class="plate">
+        <div class="boards">
+          <div>
+            <div class="board" role="img" aria-label="Grille indexée de 0 à 8">
+              <div>0</div><div>1</div><div>2</div>
+              <div>3</div><div>4</div><div>5</div>
+              <div>6</div><div>7</div><div>8</div>
+            </div>
+          </div>
+          <div>
+            <div class="board" role="img" aria-label="X gagne sur la diagonale 0, 4, 8">
+              <div class="x hl">✕</div><div class="o">◯</div><div>2</div>
+              <div>3</div><div class="x hl">✕</div><div class="o">◯</div>
+              <div>6</div><div>7</div><div class="x hl">✕</div>
+            </div>
+            <p class="board-cap"><code>GameOutcome.win(mark: x, line: WinningLine(0, 4, 8))</code></p>
+          </div>
+          <div>
+            <p class="board-cap" style="max-width:26ch">
+              L'issue <strong>porte la ligne</strong>, pas seulement le vainqueur. L'affichage trace
+              le trait sans avoir à redécouvrir l'alignement — une information calculée une fois, au
+              seul endroit qui sait la calculer.
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <figure>
+        <p class="fname"><b>game_domain</b> lib/src/entities/board.dart</p>
+<pre><code><span class="c">// Les huit alignements. `const`, donc calculés à la compilation : évaluer une issue</span>
+<span class="c">// n'alloue rien.</span>
+static const List&lt;WinningLine&gt; lines = [
+  WinningLine(0, 1, 2), WinningLine(3, 4, 5), WinningLine(6, 7, 8), <span class="c">// rangées</span>
+  WinningLine(0, 3, 6), WinningLine(1, 4, 7), WinningLine(2, 5, 8), <span class="c">// colonnes</span>
+  WinningLine(0, 4, 8), WinningLine(2, 4, 6),                       <span class="c">// diagonales</span>
+];
+</code></pre>
+        <figcaption>
+          Les cases elles-mêmes sont une <code>IList&lt;Mark?&gt;</code> et non une
+          <code>List</code> : Riverpod compare avec <code>==</code>, et une <code>List</code> a une
+          égalité d'identité — un plateau fraîchement construit serait donc toujours « différent » du
+          précédent, et tout l'écran se redessinerait à chaque coup.
+        </figcaption>
+      </figure>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <section id="ia">
+      <div class="sec-head"><h2>L'adversaire : minimax, expliqué sur son code</h2></div>
+      <div class="stack">
+        <p>
+          Trois niveaux derrière une seule interface <code>MoveStrategy</code> : aléatoire, parfait,
+          et parfait-qui-se-trompe. Le seul qui contienne un algorithme est le deuxième, et il tient
+          en cinquante lignes qu'il vaut la peine de lire en entier.
+        </p>
+      </div>
+
+      <h3>L'idée : un arbre, et deux rôles qui alternent</h3>
+      <div class="stack">
+        <p>
+          Une partie est un arbre : chaque nœud une position, chaque arête un coup, chaque feuille
+          une partie finie. Minimax donne un score aux feuilles puis le <strong>remonte</strong>, en
+          alternant deux comportements. À mon tour je prends le <strong>maximum</strong> de mes
+          options. Au tour de l'adversaire je prends le <strong>minimum</strong> — parce que je le
+          suppose optimal, donc au pire pour moi.
+        </p>
+        <p>
+          Cette alternance est portée par deux paramètres qu'il ne faut pas confondre :
+          <code>forMark</code> ne change <em>jamais</em> pendant la descente — c'est « pour qui on
+          évalue » — tandis que <code>turn</code> alterne à chaque niveau. Sans cette distinction on
+          ne sait pas s'il faut maximiser ou minimiser ici.
+        </p>
+      </div>
+
+      <figure>
+        <p class="fname"><b>figure 5</b> remonter les scores, et couper ce qui ne peut plus servir</p>
+        <div class="plate">
+<pre><code>  <span class="k">profondeur 0</span>          MOI — je prends le MAXIMUM                     ▲ max
+                            ┌──────────── 9 ────────────┐
+                            │                           │
+                       coup A                       coup B
+                            │                           │
+  <span class="k">profondeur 1</span>     LUI — il prend le MINIMUM     LUI — il prend le MINIMUM   ▼ min
+                     ┌──────┴──────┐             ┌───────┴───────┐
+                     9             9             0          <span class="c">✂ jamais exploré</span>
+                     │             │             │
+  <span class="k">profondeur 2</span>    feuille       feuille       feuille      alpha = 9  ≥  beta = 0
+                                                              <span class="c">→ MOI ai déjà 9 par A :</span>
+                                                              <span class="c">  je ne viendrai jamais en B,</span>
+                                                              <span class="c">  donc la suite ne peut pas</span>
+                                                              <span class="c">  changer ma décision.</span>
+
+  Le nœud coupé n'est pas une approximation : il est PROUVÉ inutile.
+  Alpha-bêta change le temps de calcul, jamais le coup choisi.
+</code></pre>
+        </div>
+        <figcaption>
+          <code>alpha</code> est le meilleur score que le maximisant s'est déjà assuré,
+          <code>beta</code> celui du minimisant. Les deux se resserrent en descendant, et le
+          <code>break</code> tombe quand ils se croisent.
+        </figcaption>
+      </figure>
+
+      <figure>
+        <p class="fname">packages/features/game/domain/lib/src/strategies/minimax_move_strategy.dart</p>
+<pre><code>int _scoreOf(Board board, Mark forMark, Mark turn, int depth, int alpha, int beta) {
+  final outcome = evaluateOutcome(board);
+  <span class="c">// Feuille : la partie est finie, on sait combien elle vaut.</span>
+  if (outcome is! GameInProgress) return _leafScore(outcome, forMark, depth);
+
+  <span class="c">// LE point à ne pas confondre : forMark est fixe, turn alterne.</span>
+  final maximizing = turn == forMark;
+  var best = maximizing ? -_bound : _bound;
+  var low = alpha;
+  var high = beta;
+
+  for (final index in board.freeIndexes) {
+    final score = _scoreOf(board.withMark(index, turn), forMark, turn.opponent, depth + 1, low, high);
+
+    if (maximizing) {
+      best = max(best, score);
+      low = max(low, best);
+    } else {
+      best = min(best, score);
+      high = min(high, best);
+    }
+
+    <span class="c">// L'élagage. Le niveau du dessus a déjà mieux : inutile de continuer.</span>
+    if (high &lt;= low) break;
+  }
+
+  return best;
+}</code></pre>
+      </figure>
+
+      <h3>La profondeur dans le score, ou l'IA qui a l'air cassée</h3>
+      <div class="stack">
+        <p>
+          Trois lignes, et c'est la différence entre un adversaire crédible et un qui semble
+          buggé.
+        </p>
+      </div>
+
+      <figure>
+        <p class="fname">le score d'une feuille</p>
+<pre><code>int _leafScore(GameOutcome outcome, Mark forMark, int depth) => switch (outcome) {
+  GameWin(:final mark) when mark == forMark =&gt; _win - depth,   <span class="c">// je gagne</span>
+  GameWin() =&gt; depth - _win,                                   <span class="c">// je perds</span>
+  _ =&gt; 0,                                                      <span class="c">// nul</span>
+};</code></pre>
+        <figcaption>
+          <code>_win</code> vaut 10, <code>_bound</code> vaut 1000 et sert d'infini aux bornes
+          d'alpha-bêta.
+        </figcaption>
+      </figure>
+
+      <div class="stack">
+        <p>
+          Sans le <code>- depth</code>, gagner en trois coups et gagner en sept valent tous deux
+          <code>10</code>. L'IA, indifférente entre les deux, <strong>traîne</strong> : elle a une
+          victoire garantie et joue des coups neutres pendant quatre tours avant de conclure. À
+          l'écran, ça ne ressemble pas à de la stratégie, ça ressemble à un bug.
+        </p>
+        <p>
+          Avec la profondeur, une victoire proche vaut <code>10 − 1 = 9</code> contre
+          <code>10 − 5 = 5</code> pour une lointaine : elle conclut. Et l'autre bras est
+          symétrique — <code>depth − _win</code> rend une défaite lointaine
+          (<code>−5</code>) préférable à une défaite proche (<code>−9</code>), donc acculée, elle
+          repousse l'échéance au lieu de s'effondrer.
+        </p>
+      </div>
+
+      <div class="plate">
+        <div class="boards">
+          <div>
+            <div class="board" role="img" aria-label="X en 0 et 1, O en 3 et 4, X doit jouer">
+              <div class="x">✕</div><div class="x">✕</div><div class="hl">2</div>
+              <div class="o">◯</div><div class="o">◯</div><div>5</div>
+              <div>6</div><div>7</div><div>8</div>
+            </div>
+          </div>
+          <div>
+            <p class="board-cap" style="max-width:34ch">
+              X peut <strong>gagner en 2</strong> ou <strong>bloquer en 5</strong>. La stratégie joue
+              <strong>2</strong> — mesuré, pas supposé. Gagner est terminal à profondeur 1, donc
+              <code>9</code> ; bloquer mène au mieux à un nul, donc <code>0</code>. Le maximum
+              tranche, et personne n'a écrit « si tu peux gagner, gagne ».
+            </p>
+          </div>
+        </div>
+      </div>
+
+      <h3>Le départage au hasard, et pourquoi <code>Random</code> est injecté</h3>
+      <div class="stack">
+        <p>
+          <code>chooseMove</code> ne garde pas <em>un</em> meilleur coup mais <strong>tous les ex
+          æquo</strong>, et en tire un. Sans ça, prendre toujours le plus petit indice donnerait un
+          adversaire parfait <em>et prévisible</em> : la même partie à chaque lancement.
+        </p>
+      </div>
+
+      <figure>
+        <p class="fname">chooseMove — la boucle de surface</p>
+<pre><code>for (final index in board.freeIndexes) {
+  final score = _scoreOf(board.withMark(index, mark), mark, mark.opponent, 1, -_bound, _bound);
+
+  if (score &gt; bestScore) {
+    bestScore = score;
+    bestMoves..clear()..add(index);
+  } else if (score == bestScore) {
+    bestMoves.add(index);        <span class="c">// on collectionne les égaux</span>
+  }
+}
+
+return bestMoves[random.nextInt(bestMoves.length)];</code></pre>
+        <figcaption>
+          C'est le seul appel à <code>random</code> de la stratégie, et il est fait exactement une
+          fois par coup — ce qui rend le départage <em>pilotable</em> depuis un test.
+        </figcaption>
+      </figure>
+
+      <h3>Ce que la stratégie décide vraiment</h3>
+      <div class="stack">
+        <p>
+          Relevé en exécutant l'implémentation, pas en la paraphrasant.
+        </p>
+      </div>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th>Position</th><th>Décision</th><th>Ce que ça montre</th></tr></thead>
+          <tbody>
+            <tr>
+              <td>plateau vide</td>
+              <td>joue un coin</td>
+              <td>toutes les ouvertures valent un nul, donc tous les coups sont ex æquo — le hasard tranche</td>
+            </tr>
+            <tr>
+              <td><code>O O . / . X . / . . .</code></td>
+              <td>joue <strong>2</strong></td>
+              <td>bloque la menace, sans règle écrite pour ça</td>
+            </tr>
+            <tr>
+              <td><code>X X . / O O . / . . .</code></td>
+              <td>joue <strong>2</strong></td>
+              <td>gagner passe avant bloquer — c'est la profondeur dans le score</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Le morpion est un jeu résolu, et ça change la conception</h3>
+      <div class="stack">
+        <p>
+          Fait joué contre fait joué, le morpion est toujours nul. Vérifié en faisant jouer la
+          stratégie contre elle-même depuis chaque ouverture :
+        </p>
+      </div>
+
+      <div class="plate tight">
+<pre><code>  X ouvre en 0   X . .  . . .  . . .   →  nul
+  X ouvre en 1   . X .  . . .  . . .   →  nul
+  X ouvre en 4   . . .  . X .  . . .   →  nul
+
+  X centre, O un coin  O . .  . X .  . . .   →  nul
+  X centre, O un bord  . O .  . X .  . . .   →  <span class="k">X gagne en 5 coups</span>
+</code></pre>
+      </div>
+
+      <div class="stack">
+        <p>
+          Une IA parfaite ne peut donc <strong>pas gagner</strong> contre un jeu parfait. Elle peut
+          seulement ne jamais perdre, et <strong>punir la moindre erreur</strong> — la dernière ligne
+          le montre : un bord au lieu d'un coin, et la partie est perdue pour O.
+        </p>
+        <p>
+          C'est ce constat qui dicte le niveau intermédiaire. Un minimax <em>bridé en profondeur</em>
+          serait faible toujours aux mêmes endroits, donc mémorisable. Le niveau « juste » est donc un
+          minimax <strong>parfait qui se trompe volontairement une fois sur cinq</strong> : battable
+          sans être devinable, et le taux est un paramètre, donc testable.
+        </p>
+      </div>
+
+      <figure>
+        <p class="fname">fallible_move_strategy.dart — tout le niveau intermédiaire</p>
+<pre><code>@override
+int chooseMove(Board board, Mark mark) =&gt; random.nextDouble() &lt; blunderRate
+    ? fallback.chooseMove(board, mark)
+    : perfect.chooseMove(board, mark);</code></pre>
+        <figcaption>
+          Aucune logique de jeu : il compose deux stratégies existantes. C'est ce que
+          l'interface achète.
+        </figcaption>
+      </figure>
+
+      <div class="note">
+        <span class="lbl">Le test qui vaut tous les autres</span>
+        <p>
+          Un test qui joue « quelques parties » ne prouve rien. Celui-ci parcourt
+          <strong>l'arbre entier des coups humains</strong> face à <strong>chaque réponse optimale
+          possible</strong> de l'adversaire — le départage est piloté par un faux
+          <code>Random</code> qui force le n-ième ex æquo, donc toutes les lignes sont couvertes. Ce
+          n'est pas un échantillon, c'est une preuve. Et elle tourne en millisecondes parce que le
+          domaine est du Dart pur, sans binding Flutter à démarrer.
+        </p>
+      </div>
+
+      <figure>
+        <p class="fname">test/unit/src/strategies/minimax_move_strategy_test.dart</p>
+<pre><code><span class="c">// Un Random qui rend le n-ième meilleur coup au lieu d'un au hasard : la stratégie</span>
+<span class="c">// appelle nextInt une seule fois, sur la liste des ex æquo, donc forcer cet indice</span>
+<span class="c">// fait explorer TOUTES les réponses optimales.</span>
+class _NthBestMove implements Random {
+  const _NthBestMove(this.nth);
+  final int nth;
+
+  @override
+  int nextInt(int max) =&gt; nth &lt; max ? nth : max - 1;
+  ...
+}
+
+for (var nth = 0; nth &lt; Board.cellCount; nth++) {
+  final strategy = MinimaxMoveStrategy(random: _NthBestMove(nth));
+
+  void explore(Board board, Mark turn) {
+    final outcome = evaluateOutcome(board);
+
+    if (outcome case GameWin(:final mark)) {
+      expect(mark, isNot(humanMark), reason: 'the opponent lost on $board');
+      return;
+    }
+    if (board.isFull) return;
+
+    if (turn == humanMark) {
+      <span class="c">// tous les coups humains</span>
+      for (final index in board.freeIndexes) {
+        explore(board.withMark(index, humanMark), cpuMark);
+      }
+    } else {
+      <span class="c">// la réponse de la stratégie, pour ce départage</span>
+      explore(board.withMark(strategy.chooseMove(board, cpuMark), cpuMark), humanMark);
+    }
+  }
+
+  explore(Board.empty, Mark.x);
+}</code></pre>
+        <figcaption>
+          Écrit deux fois, une par symbole du joueur — parce que « ne jamais perdre » doit tenir
+          aussi quand c'est la machine qui ouvre.
+        </figcaption>
+      </figure>
+    </section>
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <section id="routing">
+      <div class="sec-head"><h2>Le routing : deux fichiers, et une frontière</h2></div>
+      <div class="stack">
+        <p>
+          Une feature ne doit pas savoir où elle mène. Elle sait ce qui <em>vient
+          d'arriver</em> ; décider ce que ça déclenche est le travail de l'hôte. D'où deux
+          fichiers dans <code>routing/</code>, aux rôles bien distincts.
+        </p>
+      </div>
+
+      <div class="tw">
+        <table>
+          <thead><tr><th>Fichier</th><th>Ce qu'il déclare</th></tr></thead>
+          <tbody>
+            <tr>
+              <td><code>game_routing.dart</code></td>
+              <td><strong>Le port.</strong> Une interface d'évènements. C'est ce que la feature <em>réclame</em>, et le contrat que <code>bindRoutingProvider</code> nourrit.</td>
+            </tr>
+            <tr>
+              <td><code>game_router.br.dart</code></td>
+              <td><strong>Les pages.</strong> <code>@RoutePage</code> déclare ce que la feature sait afficher. La composition place ces pages dans <em>son</em> arbre de routes.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3>Le port : des évènements, jamais des destinations</h3>
+      <figure>
+        <p class="fname">game_presentation › routing/game_routing.dart</p>
+<pre><code>abstract interface class GameRouting {
+  /// Asked before a game in progress is thrown away. Returns whether the player agreed.
+  Future&lt;bool&gt; onRestartConfirmationRequested(BuildContext context);
+}</code></pre>
+        <figcaption>
+          <code>on…Requested</code>, pas <code>showConfirmationDialog</code>. La feature dit
+          qu'elle veut demander ; à quoi ressemble la question, et si c'est une modale, une
+          page ou une feuille, ne la concerne pas.
+        </figcaption>
+      </figure>
+
+      <div class="stack">
+        <p>
+          Le besoin est réel, pas inventé pour la démonstration : relancer une partie en cours
+          — ou changer de difficulté en cours de partie — jette le jeu du joueur. On lui
+          demande donc d'abord. Deux widgets appellent le même port.
+        </p>
+      </div>
+
+      <h3>Qui vérifie que le contexte est encore vivant</h3>
+      <div class="stack">
+        <p>
+          C'est la partie que tout le monde écrit à l'envers, et le dépôt maison a une règle
+          explicite pour ça : <strong>l'appelant possède la liveness, l'appelé asserte</strong>.
+        </p>
+      </div>
+
+      <figure>
+        <p class="fname">game_presentation › screens/game_screen.dart — l'appelant</p>
+<pre><code>Future&lt;void&gt; startNewGame(BuildContext context, WidgetRef ref, {required Mark humanMark, Difficulty? difficulty}) async {
+  final state = ref.read(gameUiStateProvider);
+
+  if (state.isInterruptible) {
+    final confirmed = await ref.read(gameRoutingProvider).onRestartConfirmationRequested(context);
+    <span class="c">// Le check est ICI, à l'await : seul l'appelant sait ce qu'un contexte mort</span>
+    <span class="c">// doit vouloir dire — ici, ne rien faire.</span>
+    if (!confirmed || !context.mounted) return;
+  }
+
+  ref.read(gameUiStateProvider.notifier).newGame(
+    difficulty: difficulty ?? state.game.difficulty,
+    humanMark: humanMark,
+  );
+}</code></pre>
+      </figure>
+
+      <figure>
+        <p class="fname">app › routing/app_game_routing.dart — l'implémentation</p>
+<pre><code>@override
+Future&lt;bool&gt; onRestartConfirmationRequested(BuildContext context) async {
+  assert(context.mounted, 'onRestartConfirmationRequested called with an unmounted context');
+
+  final confirmed = await showDialog&lt;bool&gt;(context: context, builder: …);
+  return confirmed ?? false;
+}</code></pre>
+        <figcaption>
+          <code>assert</code>, et surtout <strong>pas</strong>
+          <code>if (!context.mounted) return false</code>. Ce <code>false</code> dirait
+          « le joueur a refusé » à un appelant qui n'a jamais posé la question — et l'appelant
+          prendrait la branche du refus sur une décision que personne n'a prise. L'assert
+          plante en debug, ne coûte rien en release, et n'avale rien.
+        </figcaption>
+      </figure>
+
+      <h3>Le routeur : la feature déclare, la composition dispose</h3>
+      <figure>
+        <p class="fname">game_presentation › routing/game_router.br.dart</p>
+<pre><code>part 'game_router.br.gr.dart';
+
+<span class="c">// Existe uniquement pour que le générateur émette `GameRoute`. La feature déclare</span>
+<span class="c">// ses pages ; elle ne dit jamais où elles atterrissent.</span>
+@AutoRouterConfig()
+abstract class GameRouter extends RootStackRouter {}
+
+@RoutePage(name: 'GameRoute')
+class GamePage extends StatelessWidget {
+  const GamePage({super.key});
+
+  @override
+  Widget build(BuildContext context) =&gt; const GameScreen();
+}</code></pre>
+        <figcaption>
+          La classe abstraite vide n'est pas une bizarrerie : c'est un déclencheur de
+          génération. Sans elle, pas de <code>GameRoute</code> à placer ailleurs.
+        </figcaption>
+      </figure>
+
+      <figure>
+        <p class="fname">app › routing/app_router.br.dart</p>
+<pre><code>@AutoRouterConfig()
+class AppRouter extends RootStackRouter {
+  @override
+  List&lt;AutoRoute&gt; get routes =&gt; [AutoRoute(path: '/', page: HomeRoute.page, initial: true)];
+}</code></pre>
+        <figcaption>
+          L'arbre de routes appartient à la composition, et à elle seule. C'est la même
+          division que pour les contrats : la feature déclare, l'hôte décide.
+        </figcaption>
+      </figure>
+
+      <div class="note">
+        <span class="lbl">Pourquoi le routing a sa propre fonction de branchement</span>
+        <p>
+          <code>bindRoutingProvider</code> n'est pas fondue dans <code>bindProviders</code>, et
+          ce n'est pas une question d'importance : c'est que le routing est nourri depuis une
+          <em>couche de composition différente</em> du reste. Dans un gros dépôt, les valeurs
+          métier viennent de la tranche d'univers et la navigation du routeur d'application —
+          deux fichiers, deux appels. Le thème est le second cas de cette exception, pour la
+          même raison.
+        </p>
+        <p>
+          L'ensemble reste <strong>fermé</strong> : <code>bindProviders</code>,
+          <code>bindRoutingProvider</code>, <code>bindThemeProvider</code>,
+          <code>bindRegulationProviders</code>. Un nouveau contrat devient un <em>paramètre</em>
+          de l'une d'elles, jamais une cinquième fonction.
+        </p>
+      </div>
+    </section>
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <section id="sequence">
+      <div class="sec-head"><h2>La séquence, d’un tap jusqu’au disque</h2></div>
+      <div class="stack">
+        <p>
+          Les schémas précédents montrent qui dépend de qui. Celui-ci montre <em>ce qui se passe</em>,
+          dans l’ordre — quels providers sont lus, à quels instants l’état est émis, et qui se
+          redessine à chaque émission. Un coup produit <strong>quatre émissions</strong> au maximum,
+          et pas une de plus.
+        </p>
+      </div>
+
+      <figure>
+        <p class="fname"><b>A</b> le coup du joueur</p>
+        <div class="plate">
+<pre><code>  <span class="k">TAP</span> sur la case 4
+  │
+  ├─▶ <b>CellWidget.onTap</b>                                    <span class="k">game › presentation</span>
+  │     ├─▶ _bump.forward(from: 0)                     <span class="c">animation locale, aucun provider</span>
+  │     └─▶ ref.read(gameUiStateProvider.notifier).play(4)
+  │
+  ├─▶ <b>GameUiStateNotifier.play(4)</b>                         <span class="k">game › presentation</span>
+  │     │   <span class="c">garde : state.acceptsMoves — sinon on ressort sans rien émettre</span>
+  │     │
+  │     ├─▶ ref.read(<b>applyMoveProvider</b>)(game, by: .x, index: 4)
+  │     │      └─▶ ApplyMove().call                                     <span class="k">game › domain</span>
+  │     │            └─▶ MoveAccepted(game′) │ MoveRejected(raison)     <span class="c">union scellée</span>
+  │     │
+  │     ├── state = copyWith(game: game′)          <b>◀── ÉMISSION 1</b>
+  │     │      ├─▶ CellWidget(4)       <span class="c">son select change      → rebuild</span>
+  │     │      ├─▶ CellWidget(×8)      <span class="c">même select, inchangé  → PAS de rebuild</span>
+  │     │      ├─▶ StatusBanner        <span class="c">select&lt;String&gt;        → rebuild si la phrase bouge</span>
+  │     │      └─▶ BoardWidget         <span class="c">ne watch rien          → jamais</span>
+  │     │
+  │     ├─▶ _announceIfFinished()   <span class="c">game′.isOver ? → bloc C</span>
+  │     └─▶ _playCpuMove()          <span class="c">sinon → bloc B</span>
+</code></pre>
+        </div>
+        <figcaption>
+          <code>applyMove</code> est un <em>typedef</em> derrière un provider : le notifier lit une fonction, pas un objet — il ne sait pas qu’un <code>ApplyMove</code> existe.
+        </figcaption>
+      </figure>
+
+      <figure>
+        <p class="fname"><b>B</b> le tour de la machine</p>
+        <div class="plate">
+<pre><code>  ├─▶ <b>GameUiStateNotifier._playCpuMove()</b>                   <span class="k">game › presentation</span>
+  │     │
+  │     ├── state = copyWith(isCpuThinking: true)  <b>◀── ÉMISSION 2</b>
+  │     │      └─▶ StatusBanner  <span class="c">« The machine is thinking… »</span>
+  │     │
+  │     ├─▶ await Future.delayed(ref.read(<b>cpuMoveDelayProvider</b>))
+  │     │      <span class="c">350 ms en production · Duration.zero dans les tests</span>
+  │     │
+  │     │   <span class="c">garde APRÈS le gap : !ref.mounted || !state.isCpuThinking → on abandonne</span>
+  │     │   <span class="c">(une nouvelle partie a pu démarrer pendant l’attente)</span>
+  │     │
+  │     ├─▶ ref.read(<b>chooseCpuMoveProvider</b>)(game)
+  │     │      └─▶ ChooseMove().call                                    <span class="k">game › domain</span>
+  │     │            └─▶ switch difficulty → easy │ medium │ hard      <span class="c">AUCUN algorithme ici</span>
+  │     │                  └─▶ MoveStrategy.chooseMove(board, mark)     <span class="k">game › domain</span>
+  │     │                        <span class="c">Random injecté — d’où randomProvider, contrat qui lève</span>
+  │     │
+  │     ├─▶ ref.read(<b>applyMoveProvider</b>)(game, by: .o, index: n)
+  │     │
+  │     ├── state = copyWith(game: game″, isCpuThinking: false)  <b>◀── ÉMISSION 3</b>
+  │     │      └─▶ CellWidget(n) + StatusBanner
+  │     │
+  │     └─▶ _announceIfFinished()
+</code></pre>
+        </div>
+        <figcaption>
+          Deux gardes, pas une : <code>acceptsMoves</code> <em>avant</em>, et <code>!ref.mounted || !state.isCpuThinking</code> <em>après</em> le gap asynchrone. La seconde est la seule qui protège du cas réel — le joueur relance une partie pendant les 350 ms d’attente, et le coup calculé pour l’ancien plateau ne doit pas atterrir.
+        </figcaption>
+      </figure>
+
+      <figure>
+        <p class="fname"><b>C</b> la fin de partie — deux traversées de frontière</p>
+        <div class="plate">
+<pre><code>  ├─▶ ref.read(<b>onGameFinishedProvider</b>)(humanMark:, outcome:)
+  │        <span class="c">contrat SORTANT : il lève tant que rien ne le nourrit</span>
+  │
+  │  =============== FRONTIÈRE DE FEATURE ===============
+  │
+  ├─▶ <b>recordGameResultProvider</b>                                    <span class="k">app › composition</span>
+  │     ├─▶ outcome.toMatchResult(humanMark)      <span class="c">extension lexicalement scopée</span>
+  │     │      └─▶ null si GameInProgress → on sort, rien n’est compté
+  │     └─▶ unawaited(ref.read(<b>recordMatchProvider</b>)(result))
+  │            <span class="c">le plateau n’attend pas le disque — mais une erreur remonte</span>
+  │
+  │  =============== FRONTIÈRE DE FEATURE ===============
+  │
+  ├─▶ <b>recordMatchProvider</b> = scoreboardProvider.notifier.record   <span class="k">scoreboard › domain</span>
+  │     └─▶ <b>ScoreboardNotifier.record(result)</b>
+  │           └─▶ ref.read(<b>recordMatchBehaviourProvider</b>)(result)
+  │                 └─▶ RecordMatch().call                        <span class="k">scoreboard › domain</span>
+  │                       ├─▶ repository.read()
+  │                       │     └─▶ ScoreboardLocalDataSource      <span class="k">scoreboard › data</span>
+  │                       │           └─▶ keyValueStore.read(&#39;scoreboard&#39;)
+  │                       │                 └─▶ SharedPreferencesStore    <span class="k">app</span>
+  │                       │                       └─▶ <b>disque</b>
+  │                       ├─▶ .incremented(result)                <span class="c">entité pure, immuable</span>
+  │                       └─▶ repository.write(updated)
+  │                             └─▶ jsonEncode(dto) → store.write → <b>disque</b>
+  │
+  └── state = AsyncData(updated)                   <b>◀── ÉMISSION 4</b>
+         ├─▶ ScoreTile(win)    <span class="c">select countOf(win)  → rebuild</span>
+         ├─▶ ScoreTile(loss)   <span class="c">inchange             → PAS de rebuild</span>
+         ├─▶ ScoreTile(draw)   <span class="c">inchange             → PAS de rebuild</span>
+         └─▶ ScoreboardWidget  <span class="c">ne watch rien        → jamais</span>
+</code></pre>
+        </div>
+        <figcaption>
+          La chaîne traverse <strong>cinq paquets</strong> et personne ne connaît son voisin de plus d’un cran. <code>game</code> émet un évènement typé dans son propre vocabulaire, l’app traduit, <code>scoreboard</code> reçoit le sien. Retirez <code>scoreboard</code> du workspace et le bloc s’arrête à la première frontière, sans rien casser dans <code>game</code>.
+        </figcaption>
+      </figure>
+
+      <h3>Ce que le schéma rend visible</h3>
+      <div class="stack">
+        <p>
+          <strong>Quatre émissions, et chacune touche le minimum.</strong> Sur un coup gagnant :
+          deux cases sur neuf se redessinent, plus la bannière, plus une tuile de score sur trois.
+          Ni <code>BoardWidget</code>, ni <code>ScoreboardWidget</code>, ni <code>GameScreen</code>
+          ne se reconstruisent jamais — ils ne souscrivent à rien.
+        </p>
+        <p>
+          <strong>Tous les <code>ref.read</code>, aucun <code>ref.watch</code>.</strong> Dans un
+          notifier on est toujours dans un callback : la valeur est lue au moment de l’appel, on ne
+          réagit pas à son changement. Le seul <code>watch</code> de la chaîne est le
+          <code>build()</code> de <code>ScoreboardNotifier</code>, qui suit le repository.
+        </p>
+        <p>
+          <strong>Trois contrats qui lèvent sont franchis à chaque partie</strong> —
+          <code>onGameFinished</code>, <code>random</code>, <code>keyValueStore</code>. Un câblage
+          oublié n’est donc pas un bug silencieux : la première partie jouée le fait éclater.
+        </p>
+      </div>
+    </section>
+    <!-- =================================================== -->
+    <section id="fichiers-main">
+      <div class="sec-head"><h2>Dans quel ordre on écrit les fichiers d'une couche</h2></div>
+      <div class="stack">
+        <p>
+          <strong>86 fichiers écrits, 22 générés.</strong> Le codegen produit les compagnons ;
+          tout le reste est écrit. Voici l'ordre dans lequel on remplit <em>un</em> paquet —
+          l'ordre du chantier entier est plus bas. Il n'est pas négociable : <em>des feuilles vers
+          la racine, et les providers en dernier parce qu'ils câblent ce qui existe déjà.</em>
+        </p>
+      </div>
+
+      <ol class="steps">
+        <li>
+          <div>
+            <h3>Les entités — le vocabulaire</h3>
+            <p>
+              <code>mark.dart</code>, <code>board.br.dart</code>, <code>game_outcome.br.dart</code>…
+              Elles ne dépendent de rien, donc elles viennent d'abord. Nommer les choses avant de
+              décrire ce qui leur arrive.
+            </p>
+            <span class="proof"><b>suffixe</b>.br seulement si freezed est en jeu · mark.dart et difficulty.dart sont nus</span>
+          </div>
+        </li>
+        <li>
+          <div>
+            <h3>Les comportements et les stratégies — les règles</h3>
+            <p>
+              <code>evaluate_outcome.dart</code>, <code>apply_move.dart</code>,
+              <code>minimax_move_strategy.dart</code>. Ils dépendent des entités, de rien d'autre.
+              Aucun n'est exporté : ce sont des classes internes.
+            </p>
+            <span class="proof"><b>testables ici</b>sans Riverpod, sans provider — on les instancie à la main dans le test</span>
+          </div>
+        </li>
+        <li>
+          <div>
+            <h3><code>providers_di</code> — ce dont j'ai besoin</h3>
+            <p>
+              Écrit une fois qu'on sait ce qui manque. Dans <code>game_domain</code> ça tient en une
+              ligne : <code>Random</code>. On ne peut pas l'écrire avant d'avoir écrit les stratégies,
+              parce que c'est elles qui révèlent le besoin.
+            </p>
+            <span class="proof"><b>règle</b>lève, sauf si un défaut a un sens — alors il proxie l'interne</span>
+          </div>
+        </li>
+        <li>
+          <div>
+            <h3><code>providers_internal</code> — le câblage privé</h3>
+            <p>
+              Les trois stratégies instanciées avec l'aléa injecté. C'est le seul endroit qui connaît
+              à la fois le contrat entrant et les classes internes.
+            </p>
+            <span class="proof"><b>invariant</b>rien de ce fichier n'apparaît dans le barrel</span>
+          </div>
+        </li>
+        <li>
+          <div>
+            <h3><code>providers</code> — la surface, et la prise</h3>
+            <p>
+              Les typedefs, les providers publics qui exposent <code>.call</code>, et
+              <code>bindProviders()</code>. En dernier, parce qu'il ne fait que rendre visible ce que
+              les quatre étapes précédentes ont construit.
+            </p>
+            <span class="proof"><b>discriminant</b>.br.dart si la couche expose un @riverpod public · sinon providers.dart nu</span>
+          </div>
+        </li>
+        <li>
+          <div>
+            <h3>Le barrel — la décision d'exposition</h3>
+            <p>
+              Une ligne par chose qu'on assume de montrer. C'est un fichier de <em>refus</em> autant
+              que d'export : il ne liste ni les comportements, ni les stratégies, ni
+              <code>providers_di</code>.
+            </p>
+            <span class="proof"><b>relevé</b>18 symboles publics sur les 5 paquets de feature, tous consommés ou nécessaires pour nommer un type qui l'est</span>
+          </div>
+        </li>
+        <li>
+          <div>
+            <h3>Les tests — après, mais pas beaucoup après</h3>
+            <p>
+              Le domaine se teste sans rien monter, donc ses tests peuvent s'écrire dès l'étape 2.
+              Ceux du câblage attendent l'étape 5. La preuve exhaustive du minimax est le seul test
+              qui a demandé plus de réflexion que le code qu'il garde.
+            </p>
+            <span class="proof"><b>total</b>91 tests · 45 dans game_domain seul</span>
+          </div>
+        </li>
+        <li>
+          <div>
+            <h3>Puis la couche au-dessus, et la composition en dernier</h3>
+            <p>
+              <code>data</code> après <code>domain</code>, parce qu'elle implémente son interface.
+              <code>presentation</code> après <code>domain</code> aussi, jamais après
+              <code>data</code> — elle ne la connaît pas. Et l'app en dernier : elle ne peut brancher
+              que ce qui existe.
+            </p>
+            <span class="proof"><b>vérifié par</b>test/architecture/dependency_rule_test.dart, qui lit les 6 manifestes</span>
+          </div>
+        </li>
+      </ol>
+
+      <h3>Écrit à la main, ou pas — comment on le sait au premier regard</h3>
+      <div class="tw">
+        <table>
+          <thead><tr><th>Nom</th><th>Qui l'écrit</th><th>Reconnaissable à</th></tr></thead>
+          <tbody>
+            <tr><td><code>board.br.dart</code></td><td><strong>toi</strong></td><td>le <code>.br</code> annonce un compagnon, pas une génération</td></tr>
+            <tr><td><code>board.br.freezed.dart</code></td><td>freezed</td><td><code>.freezed.dart</code> — et le hook refuse qu'on l'édite</td></tr>
+            <tr><td><code>providers.br.dart</code></td><td><strong>toi</strong></td><td>contient les <code>@riverpod</code> et le <code>part</code></td></tr>
+            <tr><td><code>providers.br.g.dart</code></td><td>riverpod_generator</td><td><code>.g.dart</code></td></tr>
+            <tr><td><code>mark.dart</code></td><td><strong>toi</strong></td><td>pas de <code>.br</code> : rien à générer, un enum suffit</td></tr>
+            <tr><td><code>providers.dart</code> <em>(presentation)</em></td><td><strong>toi</strong></td><td>pas de <code>.br</code> non plus : aucun <code>@riverpod</code> public dedans</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="stack">
+        <p>
+          La règle tient en une phrase : <strong>le <code>.br</code> dit « ce fichier attend un
+          générateur », le <code>.g</code> et le <code>.freezed</code> disent « ce fichier vient d'un
+          générateur »</strong>. Un fichier sans suffixe n'a rien à voir avec le codegen.
+        </p>
+      </div>
+    </section>
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <section id="fichiers">
+      <div class="sec-head"><h2>Chaque paquet, dossier par dossier, fichier par fichier</h2></div>
+      <div class="stack">
+        <p>
+          Soixante fichiers écrits, seize générés. Chaque ligne dit ce que le fichier <em>fait</em> —
+          pas ce qu'il contient, ce qu'il rend possible.
+        </p>
+      </div>
+      <div class="tree">
+        <div class="row hd"><div class="nm"><span class="lay dom">domain</span> game_domain</div><div class="rl">Dart pur. Ne dépend de <em>rien</em> — ni Flutter, ni les autres paquets.</div></div>
+        <div class="row pth"><div class="nm">packages/features/game/domain/</div><div class="rl"></div></div>
+        <div class="row"><div class="nm" style="--d:0">build.yaml</div><div class="rl">Borne le codegen aux fichiers <code>.br.dart</code>, pour freezed comme pour riverpod.</div></div>
+        <div class="row"><div class="nm" style="--d:0">lib/game_domain.dart</div><div class="rl">Le barrel. Exporte les entités et <code>providers.br.dart</code> — <strong>jamais</strong> <code>providers_di</code>.</div></div>
+        <div class="row dir"><div class="nm" style="--d:1">src/entities/</div><div class="rl">Les objets de valeur. Immuables, comparables par valeur, sans comportement métier.</div></div>
+        <div class="row"><div class="nm" style="--d:2">mark.dart</div><div class="rl">Les deux symboles <code>x</code> et <code>o</code>, et l'adversaire de chacun. Pas de codegen : un enum suffit.</div></div>
+        <div class="row"><div class="nm" style="--d:2">difficulty.dart</div><div class="rl"><code>easy | medium | hard</code>. Décrit une intention, jamais un algorithme.</div></div>
+        <div class="row"><div class="nm" style="--d:2">winning_line.dart</div><div class="rl">Les trois cases alignées. Portée jusqu'à l'affichage, pour tracer le trait sans recalculer.</div></div>
+        <div class="row"><div class="nm" style="--d:2">board.br.dart</div><div class="rl">Les neuf cases en <code>IList&lt;Mark?&gt;</code>, les huit alignements en <code>const</code>, et les opérations pures.</div></div>
+        <div class="row"><div class="nm" style="--d:2">game_outcome.br.dart</div><div class="rl">Union scellée : <code>inProgress</code> | <code>win(mark, line)</code> | <code>draw</code>. La victoire porte sa ligne.</div></div>
+        <div class="row"><div class="nm" style="--d:2">move_outcome.br.dart</div><div class="rl">Union scellée : <code>accepted(game)</code> | <code>rejected(reason)</code>. Un coup illégal est un cas à traiter, pas une exception.</div></div>
+        <div class="row"><div class="nm" style="--d:2">game.br.dart</div><div class="rl">Une partie en cours : plateau, tour, symbole du joueur, difficulté, issue.</div></div>
+        <div class="row dir"><div class="nm" style="--d:1">src/behaviors/</div><div class="rl">La logique métier, en objets appelables nommés par un verbe. Pas de suffixe <code>Behavior</code>.</div></div>
+        <div class="row"><div class="nm" style="--d:2">evaluate_outcome.dart</div><div class="rl">Plateau → issue. Parcourt les huit lignes, puis teste le plateau plein.</div></div>
+        <div class="row"><div class="nm" style="--d:2">apply_move.dart</div><div class="rl">Partie + case → coup accepté ou rejeté. Le <em>seul</em> juge de la légalité, et il prend <code>by</code> pour imposer l'ordre du tour.</div></div>
+        <div class="row"><div class="nm" style="--d:2">choose_move.dart</div><div class="rl">Partie → la case que joue le CPU. Traduit une difficulté en stratégie ; ne contient aucun algorithme.</div></div>
+        <div class="row dir"><div class="nm" style="--d:1">src/strategies/</div><div class="rl">L'adversaire artificiel. Une interface, trois implémentations — la seule abstraction du domaine qui se justifie.</div></div>
+        <div class="row"><div class="nm" style="--d:2">move_strategy.dart</div><div class="rl">L'interface : <code>int chooseMove(Board, Mark)</code>.</div></div>
+        <div class="row"><div class="nm" style="--d:2">random_move_strategy.dart</div><div class="rl">Une case libre au hasard. Le niveau facile, et le repli du niveau moyen.</div></div>
+        <div class="row"><div class="nm" style="--d:2">minimax_move_strategy.dart</div><div class="rl">Minimax avec élagage alpha-bêta, la profondeur intégrée au score. Ne peut pas perdre.</div></div>
+        <div class="row"><div class="nm" style="--d:2">fallible_move_strategy.dart</div><div class="rl">Le parfait, qui se trompe volontairement une fois sur cinq. Le taux est un paramètre, donc testable.</div></div>
+        <div class="row"><div class="nm" style="--d:1">src/providers_di.br.dart</div><div class="rl"><strong>Entrant.</strong> Un seul contrat : <code>Random</code>. Le domaine refuse de créer son propre aléa.</div></div>
+        <div class="row"><div class="nm" style="--d:1">src/providers_internal.br.dart</div><div class="rl"><strong>Interne.</strong> Les trois stratégies câblées. Aucune n'est publique.</div></div>
+        <div class="row"><div class="nm" style="--d:1">src/providers.br.dart</div><div class="rl"><strong>Sortant.</strong> <code>applyMove</code> et <code>chooseCpuMove</code> derrière des typedefs, plus <code>bindProviders({random})</code>.</div></div>
+      </div>
+      <div class="tree">
+        <div class="row hd"><div class="nm"><span class="lay pre">presentation</span> game_presentation</div><div class="rl">Dépend de <code>game_domain</code>, de Flutter et d'auto_route. <strong>Jamais</strong> d'une couche data.</div></div>
+        <div class="row pth"><div class="nm">packages/features/game/presentation/</div><div class="rl"></div></div>
+        <div class="row"><div class="nm" style="--d:0">lib/game_presentation.dart</div><div class="rl">Le barrel, en cinq lignes : l'écran, le port, le routeur, la prise. L'état d'écran <em>n'en fait pas partie</em> — rien dehors ne le lit.</div></div>
+        <div class="row dir"><div class="nm" style="--d:1">src/state/</div><div class="rl">L'état affichable, séparé de son notifier comme dans le dépôt maison.</div></div>
+        <div class="row"><div class="nm" style="--d:2">game_ui_state.br.dart</div><div class="rl">La partie, si le CPU réfléchit, et les prédicats que les widgets interrogent — <code>acceptsMoves</code>, <code>isInterruptible</code>, <code>isWinning(i)</code>.</div></div>
+        <div class="row dir"><div class="nm" style="--d:1">src/notifiers/</div><div class="rl">L'unique propriétaire de cet état.</div></div>
+        <div class="row"><div class="nm" style="--d:2">game_ui_state_notifier.br.dart</div><div class="rl">Applique le coup humain, déclenche le tour du CPU après un délai, et <strong>publie la fin de partie sur le port</strong>. Le seul objet mutable de la feature.</div></div>
+        <div class="row dir"><div class="nm" style="--d:1">src/routing/</div><div class="rl">Le port de navigation, et les pages que la feature sait afficher.</div></div>
+        <div class="row"><div class="nm" style="--d:2">game_routing.dart</div><div class="rl">L'interface : <code>onRestartConfirmationRequested</code>. Un évènement, jamais une destination.</div></div>
+        <div class="row"><div class="nm" style="--d:2">game_router.br.dart</div><div class="rl"><code>@AutoRouterConfig</code> + <code>@RoutePage</code>. Existe pour que le générateur émette <code>GameRoute</code>, que la composition placera dans <em>son</em> arbre.</div></div>
+        <div class="row dir"><div class="nm" style="--d:1">src/screens/</div><div class="rl">Les écrans complets.</div></div>
+        <div class="row"><div class="nm" style="--d:2">game_screen.dart</div><div class="rl">Assemble les widgets, sans logique. Porte aussi <code>startNewGame</code>, qui possède le gap d'<code>await</code> autour de la confirmation.</div></div>
+        <div class="row dir"><div class="nm" style="--d:1">src/widgets/</div><div class="rl">Des widgets atomiques. Chacun souscrit à ce qu'il dessine, et rien de plus.</div></div>
+        <div class="row"><div class="nm" style="--d:2">board_widget.dart</div><div class="rl">La grille 3×3, plafonnée à 320 px. Ne <code>watch</code> rien : il ne fait que placer neuf cases.</div></div>
+        <div class="row"><div class="nm" style="--d:2">cell_widget.dart</div><div class="rl"><strong>Une</strong> case. <code>const</code>, prend son index, et <code>select</code> un record de deux valeurs — un coup redessine une case, pas le plateau.</div></div>
+        <div class="row"><div class="nm" style="--d:2">status_banner.dart</div><div class="rl">« À toi de jouer », « Gagné », « Match nul ». Souscrit à la <em>phrase</em>, pas à l'état.</div></div>
+        <div class="row"><div class="nm" style="--d:2">difficulty_selector.dart</div><div class="rl">Les trois niveaux. Changer de niveau relance, donc passe par la même confirmation.</div></div>
+        <div class="row"><div class="nm" style="--d:1">src/on_game_finished.dart</div><div class="rl">Le typedef du port de sortie. Son propre fichier, parce qu'il est importé par des gens qui ne veulent pas du reste.</div></div>
+        <div class="row"><div class="nm" style="--d:1">src/providers_di.br.dart</div><div class="rl"><strong>Entrant.</strong> Deux contrats qui <em>lèvent</em> — le routing et la fin de partie — et un qui <em>proxie</em> : le délai du CPU.</div></div>
+        <div class="row"><div class="nm" style="--d:1">src/providers_internal.br.dart</div><div class="rl"><strong>Interne.</strong> Les 350 ms par défaut, ce qui rend le contrat de délai facultatif.</div></div>
+        <div class="row"><div class="nm" style="--d:1">src/providers.dart</div><div class="rl"><strong>Sortant.</strong> <code>bindRoutingProvider({routing})</code> et <code>bindProviders({onGameFinished, cpuMoveDelay})</code>. Sans codegen : aucun provider annoté public ici.</div></div>
+      </div>
+      <div class="tree">
+        <div class="row hd"><div class="nm"><span class="lay dom">domain</span> scoreboard_domain</div><div class="rl">Dart pur. Ignore tout du morpion — il ne sait pas ce qu'est une ligne gagnante.</div></div>
+        <div class="row pth"><div class="nm">packages/features/scoreboard/domain/</div><div class="rl"></div></div>
+        <div class="row"><div class="nm" style="--d:0">lib/scoreboard_domain.dart</div><div class="rl">Le barrel.</div></div>
+        <div class="row dir"><div class="nm" style="--d:1">src/entities/</div><div class="rl"></div></div>
+        <div class="row"><div class="nm" style="--d:2">match_result.dart</div><div class="rl"><code>win | loss | draw</code>. Le vocabulaire de <em>cette</em> feature : c'est pourquoi elle n'a pas besoin de connaître <code>GameOutcome</code>.</div></div>
+        <div class="row"><div class="nm" style="--d:2">scoreboard.br.dart</div><div class="rl">Trois compteurs, et les valeurs dérivées — total joué, compteur par résultat.</div></div>
+        <div class="row"><div class="nm" style="--d:1">src/repositories/scoreboard_repository.dart</div><div class="rl">L'interface : lire un score, écrire un score. <strong>Deux méthodes, et toute l'inversion de dépendance du projet.</strong></div></div>
+        <div class="row dir"><div class="nm" style="--d:1">src/behaviors/</div><div class="rl"></div></div>
+        <div class="row"><div class="nm" style="--d:2">record_match.dart</div><div class="rl">Lit le score, incrémente le bon compteur, le fait persister. La seule logique de la feature.</div></div>
+        <div class="row"><div class="nm" style="--d:1">src/notifiers/scoreboard_notifier.br.dart</div><div class="rl"><code>AsyncNotifier</code> : <code>build()</code> lit le score, <code>record()</code> le fait avancer. Un notifier ici parce que quelque chose d'extérieur écrit.</div></div>
+        <div class="row"><div class="nm" style="--d:1">src/providers_di.br.dart</div><div class="rl"><strong>Entrant.</strong> <code>ScoreboardRepository</code> — lève tant que la composition ne l'a pas nourri.</div></div>
+        <div class="row"><div class="nm" style="--d:1">src/providers_internal.br.dart</div><div class="rl"><strong>Interne.</strong> Le comportement, construit avec le repository du contrat. Le dehors n'obtient que le résultat de son appel.</div></div>
+        <div class="row"><div class="nm" style="--d:1">src/providers.br.dart</div><div class="rl"><strong>Sortant.</strong> Le score observable, <code>recordMatch</code>, et <code>bindProviders({repository})</code>.</div></div>
+      </div>
+      <div class="tree">
+        <div class="row hd"><div class="nm"><span class="lay dat">data</span> scoreboard_data</div><div class="rl">Dépend de <code>scoreboard_domain</code> parce qu'il <em>implémente</em> son interface. Pas de Flutter : le stockage est derrière un contrat.</div></div>
+        <div class="row pth"><div class="nm">packages/features/scoreboard/data/</div><div class="rl"></div></div>
+        <div class="row"><div class="nm" style="--d:0">lib/scoreboard_data.dart</div><div class="rl">Le barrel : le provider d'implémentation et le port de stockage. Le DTO reste privé.</div></div>
+        <div class="row"><div class="nm" style="--d:1">src/dtos/scoreboard_dto.br.dart</div><div class="rl">La forme <em>stockée</em>, sérialisable. Séparée de l'entité pour qu'un changement de format ne remonte pas dans le domaine.</div></div>
+        <div class="row"><div class="nm" style="--d:1">src/mappers/scoreboard_dto_mapper.dart</div><div class="rl">DTO → entité, et l'inverse. Écrit à la main, et testé dans les deux sens.</div></div>
+        <div class="row"><div class="nm" style="--d:1">src/data_sources/key_value_store.dart</div><div class="rl">L'interface de stockage : <code>read(key)</code>, <code>write(key, value)</code>. <strong>Le bas de la couche data</strong> — ce qui la rend testable sans plugin.</div></div>
+        <div class="row"><div class="nm" style="--d:1">src/data_sources/scoreboard_local_data_source.dart</div><div class="rl"><code>implements ScoreboardRepository</code> directement — règle A, une seule source, aucune classe de repository à intercaler. Un JSON illisible rend un score à zéro plutôt que de faire planter l'app.</div></div>
+        <div class="row"><div class="nm" style="--d:1">src/providers_di.br.dart</div><div class="rl"><strong>Entrant.</strong> <code>KeyValueStore</code>.</div></div>
+        <div class="row"><div class="nm" style="--d:1">src/providers_internal.br.dart</div><div class="rl"><strong>Interne.</strong> La data source. Son nom ne sort pas du paquet.</div></div>
+        <div class="row"><div class="nm" style="--d:1">src/providers.br.dart</div><div class="rl"><strong>Sortant.</strong> Le provider d'implémentation, <strong>typé avec l'interface du domaine</strong>, et <code>bindProviders({store})</code>.</div></div>
+      </div>
+      <div class="tree">
+        <div class="row hd"><div class="nm"><span class="lay pre">presentation</span> scoreboard_presentation</div><div class="rl">Dépend de <code>scoreboard_domain</code>. <strong>Aucun fichier de providers</strong> : rien ne lui est fourni de l'extérieur.</div></div>
+        <div class="row pth"><div class="nm">packages/features/scoreboard/presentation/</div><div class="rl"></div></div>
+        <div class="row"><div class="nm" style="--d:0">lib/scoreboard_presentation.dart</div><div class="rl">Le barrel, une ligne : la rangée que l'hôte monte.</div></div>
+        <div class="row"><div class="nm" style="--d:1">src/widgets/scoreboard_widget.dart</div><div class="rl">Les trois compteurs en ligne. Ne <code>watch</code> rien lui-même.</div></div>
+        <div class="row"><div class="nm" style="--d:1">src/widgets/score_tile.dart</div><div class="rl">Un compteur. <code>const</code>, et <code>select</code> le sien — le compteur des nuls ne bouge pas quand on gagne. Non exporté : seul son parent le monte.</div></div>
+      </div>
+      <div class="tree">
+        <div class="row hd"><div class="nm"><span class="lay com">composition</span> tictactoe</div><div class="rl"><strong>Le seul paquet qui dépend des deux features.</strong> Il branche, il traduit, il ne calcule pas.</div></div>
+        <div class="row pth"><div class="nm">apps/tictactoe/</div><div class="rl"></div></div>
+        <div class="row"><div class="nm" style="--d:0">lib/main.dart</div><div class="rl"><code>runApp</code> dans un <code>ProviderScope</code>. Cinq lignes.</div></div>
+        <div class="row"><div class="nm" style="--d:1">src/app.dart</div><div class="rl"><code>MaterialApp.router</code>, les thèmes clair et sombre, et la config du routeur.</div></div>
+        <div class="row dir"><div class="nm" style="--d:1">src/routing/</div><div class="rl">Ce que la composition possède : l'arbre de routes, et les réponses aux ports des features.</div></div>
+        <div class="row"><div class="nm" style="--d:2">app_router.br.dart</div><div class="rl"><code>AppRouter</code> et sa liste de routes. Le seul endroit qui décide où les pages atterrissent.</div></div>
+        <div class="row"><div class="nm" style="--d:2">app_game_routing.dart</div><div class="rl">L'implémentation de <code>GameRouting</code> : une modale de confirmation. <code>assert(context.mounted)</code>, jamais un garde qui avale.</div></div>
+        <div class="row dir"><div class="nm" style="--d:1">src/composition/</div><div class="rl">Le câblage, et la traduction entre features.</div></div>
+        <div class="row"><div class="nm" style="--d:2">providers.dart</div><div class="rl"><strong>Tous les <code>bind*</code>.</strong> Le fichier à lire en premier pour comprendre le dépôt : il dit qui dépend de qui.</div></div>
+        <div class="row"><div class="nm" style="--d:2">game_result_recorder.dart</div><div class="rl"><code>GameOutcome</code> → <code>MatchResult</code>, et l'appel au score. Le point de contact <em>unique</em> des deux vocabulaires.</div></div>
+        <div class="row"><div class="nm" style="--d:2">shared_preferences_store.dart</div><div class="rl"><code>KeyValueStore</code> adossé à <code>shared_preferences</code>. La seule dépendance externe du projet, confinée ici.</div></div>
+        <div class="row"><div class="nm" style="--d:1">src/home_screen.dart</div><div class="rl">Assemble <code>GameScreen</code> et <code>ScoreboardWidget</code>. C'est ici, et nulle part ailleurs, que les deux features apparaissent dans le même fichier.</div></div>
+        <div class="row"><div class="nm" style="--d:1">test/architecture/dependency_rule_test.dart</div><div class="rl">Lit les six <code>pubspec.yaml</code> et échoue si une feature en importe une autre, ou si un domaine importe Flutter. <strong>La règle devient exécutable.</strong></div></div>
+      </div>
+    </section>
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <section id="etapes">
+      <div class="sec-head"><h2>Le chantier entier, tranche par tranche, et sa preuve</h2></div>
+      <div class="stack">
+        <p>
+          Le niveau au-dessus : non plus les fichiers d'un paquet, mais les tranches du projet.
+          Chacune ne dépend que des précédentes et se termine par une vérification exécutable — une
+          tranche qui ne se vérifie pas n'est pas terminée.
+        </p>
+      </div>
+
+      <ol class="steps">
+        <li>
+          <div>
+            <h3>Le workspace et la config</h3>
+            <p>
+              Racine du <em>pub workspace</em>, les six paquets déclarés, une seule
+              <code>analysis_options.yaml</code> en <code>very_good_analysis</code> avec
+              <code>strict-casts</code>, <code>strict-inference</code> et
+              <code>strict-raw-types</code>.
+            </p>
+            <span class="proof"><b>vérifié par</b>flutter pub get résout tout l'arbre · dart analyze sans avertissement</span>
+          </div>
+        </li>
+        <li>
+          <div>
+            <h3><span class="lay dom">domain</span> Les règles du jeu</h3>
+            <p>
+              Entités <code>Mark</code>, <code>Board</code>, <code>WinningLine</code>,
+              <code>GameOutcome</code>, <code>Game</code>. Comportements <code>EvaluateOutcome</code>
+              et <code>ApplyMove</code> — ce dernier rend une union scellée
+              <code>MoveAccepted</code> / <code>MoveRejected</code>, pour qu'un coup illégal soit un
+              cas à traiter et non une exception à attraper.
+            </p>
+            <span class="proof"><b>vérifié par</b>les 8 lignes gagnantes, le nul, les 4 motifs de rejet</span>
+          </div>
+        </li>
+        <li>
+          <div>
+            <h3><span class="lay dom">domain</span> L'adversaire</h3>
+            <p>
+              L'interface <code>MoveStrategy</code> et ses trois implémentations : aléatoire, minimax
+              parfait, et faillible. Le hasard est injecté partout.
+            </p>
+            <span class="proof"><b>vérifié par</b>la preuve exhaustive · le coup gagnant immédiat · le blocage forcé · le taux d'erreur du niveau moyen, graine fixée</span>
+          </div>
+        </li>
+        <li>
+          <div>
+            <h3><span class="lay dom">domain</span><span class="lay dat">data</span> Le score</h3>
+            <p>
+              Entité <code>Scoreboard</code>, enum <code>MatchResult</code>, interface de repository.
+              Puis le DTO freezed, son mapper, et une data source qui <code>implements</code>
+              l'interface. Le stockage passe par une interface <code>KeyValueStore</code> à deux
+              méthodes, pour que <code>shared_preferences</code> reste au bord du monde.
+            </p>
+            <span class="proof"><b>vérifié par</b>aller-retour DTO ↔ entité · un stockage vide rend un score à zéro · un JSON corrompu ne fait pas planter l'app</span>
+          </div>
+        </li>
+        <li>
+          <div>
+            <h3><span class="lay pre">presentation</span> Le plateau à l'écran</h3>
+            <p>
+              <code>GameUiState</code> freezed et son notifier. Et le point de soin : chaque case est
+              un widget <code>const</code> qui souscrit à <strong>sa seule case</strong> —
+              <code>select((state) =&gt; (state.markAt(index), state.isWinning(index)))</code>, un
+              record, donc une seule souscription pour deux valeurs. Un coup redessine une case, pas
+              le plateau. Plus le rebond élastique au tap, one-shot.
+            </p>
+            <span class="proof"><b>vérifié par</b>rebuild_granularity_test — un coup notifie deux cases et pas les sept autres · le tour du CPU est asynchrone et l'écran reste utilisable</span>
+          </div>
+        </li>
+        <li>
+          <div>
+            <h3><span class="lay pre">presentation</span> Le score à l'écran</h3>
+            <p>
+              Le widget de score, qui lit son propre provider. Rien de plus : la feature n'a pas
+              d'état d'écran propre, son état <em>est</em> le score.
+            </p>
+            <span class="proof"><b>vérifié par</b>un test de widget avec un repository faux</span>
+          </div>
+        </li>
+        <li>
+          <div>
+            <h3><span class="lay com">composition</span> Le branchement</h3>
+            <p>
+              Le <code>main</code>, le <code>ProviderScope</code> et ses overrides, la palette claire
+              et sombre — tenue par l'app, jamais par une feature — l'écran qui assemble les widgets
+              des deux features, et la traduction <code>GameOutcome</code> → <code>MatchResult</code>.
+            </p>
+            <span class="proof"><b>vérifié par</b>end_to_end_test — une partie complète met le score à jour et le persiste · le score survit au redémarrage</span>
+          </div>
+        </li>
+        <li>
+          <div>
+            <h3><span class="lay pre">presentation</span><span class="lay com">composition</span> Le routage et le port de confirmation</h3>
+            <p>
+              auto_route des deux côtés : la feature déclare une page (<code>GamePage</code> →
+              <code>GameRoute</code>), l'app possède l'arbre de routes et mémoïse le
+              <code>RouterConfig</code> dans un provider. Et le port
+              <code>GameRouting.onRestartConfirmationRequested</code> — jeter une partie en cours
+              demande d'abord, mais la feature ne sait pas que la question prend la forme d'une
+              <code>AlertDialog</code>.
+            </p>
+            <span class="proof"><b>vérifié par</b>restart_dialog_test, qui exerce la VRAIE implémentation de routage — les tests de la feature utilisent un double, donc rien d'autre n'attraperait un showDialog cassé</span>
+          </div>
+        </li>
+        <li>
+          <div>
+            <h3>Le filet</h3>
+            <p>
+              Deux preuves complémentaires. Un test d'architecture qui lit les six
+              <code>pubspec.yaml</code> et échoue si une feature en importe une autre, ou si un
+              domaine importe Flutter — il asserte le <em>négatif</em>. Et
+              <code>tool/prove_independence.sh</code>, qui déplace physiquement l'autre feature et
+              l'app hors de l'arbre, puis analyse et teste ce qui reste — il asserte le
+              <em>positif</em>. Trois jobs de CI : le check complet, l'indépendance, et la
+              vérification que le code généré est bien à jour.
+            </p>
+            <span class="proof"><b>vérifié par</b>le test d'archi échoue si on ajoute volontairement l'import interdit · prove_independence.sh passe dans les deux sens</span>
+          </div>
+        </li>
+      </ol>
+    </section>
+
+    <!-- ═══════════════════════════════════════════════════════ -->
+    <section id="arbitrages">
+      <div class="sec-head"><h2>Les arbitrages, et ce que j'ai refusé de faire</h2></div>
+      <div class="stack">
+        <p>
+          Un exercice comme celui-ci se juge autant sur ce qu'on n'a pas fait. Cinq décisions
+          méritent d'être défendues explicitement — et la première commande toutes les autres.
+        </p>
+      </div>
+
+      <h3>Le critère : ressembler à <code>flutter-front</code>, pas à un morpion</h3>
+      <p>
+        Plusieurs choix de ce dépôt sont <strong>disproportionnés pour un jeu à neuf cases</strong>,
+        et c'est délibéré. Le triplet <code>providers_di</code> / <code>providers_internal</code> /
+        <code>providers</code>, le suffixe <code>.br.dart</code>, la couche <code>Page</code>
+        au-dessus de <code>Screen</code>, les fonctions <code>bind*</code> : rien de tout cela ne se
+        justifie par la taille du problème. Ça se justifie parce que le code doit être lisible par
+        quelqu'un qui vit dans <code>flutter-front</code> toute la journée, et qu'une convention
+        maison à moitié appliquée coûte plus cher à relire qu'une convention appliquée entièrement.
+      </p>
+      <p>
+        Le corollaire est assumé : là où la convention n'a rien à porter, elle tombe. Le jeu n'a pas
+        de thème de feature, donc sa présentation n'a plus de <code>providers_internal</code> — le
+        garder vide serait du décor, pas de l'iso.
+      </p>
+
+      <h3>Pub workspace, et pas melos</h3>
+      <p>
+        Le <em>pub workspace</em> natif donne l'essentiel — résolution unique, un
+        <code>pub get</code>, dépendances inter-paquets par nom. Melos apporte en plus la
+        centralisation des versions et des scripts par paquet ; à six paquets et un développeur, ce
+        serait un outil de plus à installer pour un problème qu'on n'a pas. Le seuil est net : dès
+        qu'on veut une seule source de vérité pour les versions, ou lancer le codegen par lot,
+        melos devient rentable.
+      </p>
+
+      <h3>Pas de générateur de paquets</h3>
+      <p>
+        Le dépôt a d'abord embarqué des bricks Mason, à l'image du <code>mise run create-package</code>
+        de <code>flutter-front</code>. Ils ont été retirés : un générateur se rentabilise sur la
+        dixième feature, pas sur la deuxième, et il ajoutait un outil à installer plus un gabarit à
+        maintenir en parallèle du code qu'il produit. Les six paquets sont écrits à la main. Le seuil
+        est net : dès qu'une équipe crée des features en série, le brick reprend l'avantage.
+      </p>
+
+      <h3>Une vraie persistance, une seule dépendance externe</h3>
+      <p>
+        <code>shared_preferences</code>, et rien d'autre. C'est ce qui donne une raison d'être à la
+        couche <code>data</code> : sans persistance, « Clean Architecture » serait une coquille à
+        trois dossiers. Et elle reste derrière une interface <code>KeyValueStore</code> maison, ce
+        qui garde le paquet <code>data</code> testable sans plugin et sans binding Flutter.
+      </p>
+
+      <h3>Des faux, pas une bibliothèque de mocks</h3>
+      <p>
+        Les tests utilisent de petites classes qui implémentent la vraie interface. Un faux
+        <code>KeyValueStore</code> adossé à une <code>Map</code> fait quinze lignes, se lit d'un coup
+        d'œil, et ne casse pas quand une signature change de façon compatible. Une bibliothèque de
+        mocks aurait ajouté du codegen et une syntaxe de vérification pour un projet qui n'en a pas
+        besoin.
+      </p>
+
+      <h3>Un port, et pas un bus d'évènements</h3>
+      <p>
+        Pour faire dialoguer deux features découplées, on pense vite à un bus : un flux global où
+        l'on publie et où l'on s'abonne. Je l'ai écarté. Un bus rend le graphe de dépendances
+        <em>invisible</em> — on ne sait plus qui écoute quoi sans lire tout le dépôt — alors qu'un
+        port nommé, branché à un seul endroit, se lit dans le fichier de composition. À deux
+        features, la question ne se pose même pas ; à vingt, je voudrais toujours pouvoir répondre
+        « qui réagit à la fin d'une partie ? » en ouvrant un seul fichier.
+      </p>
+
+      <div class="note">
+        <span class="lbl">Ce que je ferais avec deux jours de plus</span>
+        <p>
+          Un mode deux joueurs locaux — la feature <code>game</code> le supporte déjà, il n'y aurait
+          que la présentation à ajuster, ce qui est un bon test de la frontière. Un historique des
+          parties, qui transformerait <code>scoreboard</code> en vraie feature à liste. Et surtout
+          des <strong>golden tests</strong> : il n'y en a aucun aujourd'hui, et les 91 tests de
+          comportement sont restés verts pendant toute la refonte visuelle — ils ne regardent pas les
+          pixels. Un golden sur le plateau (vide, partie en cours, ligne gagnante, en clair et
+          sombre) épinglerait le rendu pour qu'un changement soit une décision et non un accident.
+        </p>
+      </div>
+    </section>
+
+    <footer>
+      Note d'architecture du dépôt <code>tictactoe</code> — Flutter 3.44.4, Dart 3.12.
+      Les extraits de code sont ceux du dépôt ; les diagrammes décrivent les six paquets tels
+      qu'ils sont déclarés dans le workspace.
+    </footer>
+
+  </main>
+</div>
+
+<script>
+  (function () {
+    var links = Array.prototype.slice.call(document.querySelectorAll('.rail a'));
+    var byId = {};
+    links.forEach(function (a) {
+      var id = a.getAttribute('href').slice(1);
+      var el = document.getElementById(id);
+      if (el) { byId[id] = a; }
+    });
+    var ids = Object.keys(byId);
+    if (!ids.length || !('IntersectionObserver' in window)) { return; }
+
+    var visible = {};
+    var observer = new IntersectionObserver(function (entries) {
+      entries.forEach(function (entry) {
+        visible[entry.target.id] = entry.isIntersecting;
+      });
+      var current = null;
+      for (var i = 0; i < ids.length; i++) {
+        if (visible[ids[i]]) { current = ids[i]; break; }
+      }
+      links.forEach(function (a) { a.classList.remove('on'); });
+      if (current) { byId[current].classList.add('on'); }
+    }, { rootMargin: '-10% 0px -70% 0px' });
+
+    ids.forEach(function (id) { observer.observe(document.getElementById(id)); });
+  })();
+</script>
+</body>
+</html>
