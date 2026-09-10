@@ -24,7 +24,10 @@ linter:
     # for a non-obvious *why*.
     public_member_api_docs: false
     lines_longer_than_80_chars: false
-    # Repository and strategy ports are named roles with constructor-injected
-    # dependencies. A typedef cannot carry those, so a one-member interface is the right
-    # shape here even when the lint suggests collapsing it.
+    # Two different reasons, both of which outlive the current method count. Repository
+    # and strategy ports carry constructor-injected dependencies, which a typedef cannot
+    # hold. Routing ports are named roles that grow: a second destination would mean a
+    # second typedef, provider and bind parameter, where an interface keeps one name and
+    # one binding. Single-method ports with neither property use a typedef instead —
+    # `OnGameFinished` is one.
     one_member_abstracts: false
