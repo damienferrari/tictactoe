@@ -1,0 +1,11 @@
+# Le codegen ne relit que les fichiers qui l'attendent. C'est ce qui donne son sens au
+# suffixe `.br` : il est lisible par l'outil, pas décoratif.
+targets:
+  $default:
+    builders:
+      freezed:
+        generate_for:
+          - "**/*.br.dart"
+      riverpod_generator:
+        generate_for:
+          - "**/*.br.dart"
