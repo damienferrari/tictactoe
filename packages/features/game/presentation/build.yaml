@@ -1,5 +1,5 @@
-# Le codegen ne relit que les fichiers qui l'attendent. C'est ce qui donne son sens au
-# suffixe `.br` : il est lisible par l'outil, pas décoratif.
+# Codegen only reads the files that expect it. That is what makes the `.br` suffix load-bearing
+# rather than decorative — the tool reads it.
 targets:
   $default:
     builders:

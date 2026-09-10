@@ -1,5 +1,5 @@
 name: tictactoe
-description: Morpion contre la machine. Ce paquet est la couche de composition — il branche, il ne calcule pas.
+description: Tic-tac-toe against the machine. This package is the composition layer — it wires, it does not compute.
 publish_to: none
 version: 1.0.0+1
 

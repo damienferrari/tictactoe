@@ -1,12 +1,12 @@
 name: tictactoe_workspace
-description: Racine du pub workspace — ne contient aucun code, seulement la liste des paquets.
+description: Workspace root. Holds no code — only the list of packages.
 publish_to: none
 
 environment:
   sdk: ^3.12.0
 
-# Pub workspace (Dart 3.6+) : une seule résolution, un seul pubspec.lock, un seul `flutter pub get`
-# pour tout l'arbre. Les paquets ci-dessous se référencent entre eux sans `path:` ni `melos bootstrap`.
+# One resolution, one lockfile, one `flutter pub get` for the whole tree. The members below
+# refer to each other by name — no `path:` entries, no bootstrap step.
 workspace:
   - apps/tictactoe
   - packages/features/game/domain
