@@ -1,0 +1,35 @@
+# Dart / Flutter build output
+.dart_tool/
+build/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+
+# The lockfile IS committed: this is an application workspace, and reproducible
+# resolution is the point. Only package libraries ignore it.
+
+# iOS / macOS
+**/ios/Pods/
+**/ios/Podfile.lock
+**/ios/.symlinks/
+**/ios/Flutter/Flutter.framework/
+**/ios/Flutter/Flutter.podspec
+**/ios/Flutter/ephemeral/
+**/macos/Pods/
+**/macos/Flutter/ephemeral/
+**/xcuserdata/
+*.xcworkspace/xcshareddata/IDEWorkspaceChecks.plist
+
+# Android
+**/android/.gradle/
+**/android/local.properties
+**/android/**/*.iml
+**/android/captures/
+
+# Golden test failures are transient; the baselines under goldens/ are committed
+**/failures/
+
+# Editor / OS
+.idea/
+*.iml
+.DS_Store

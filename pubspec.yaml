@@ -1,0 +1,19 @@
+name: tictactoe_workspace
+description: Racine du pub workspace — ne contient aucun code, seulement la liste des paquets.
+publish_to: none
+
+environment:
+  sdk: ^3.12.0
+
+# Pub workspace (Dart 3.6+) : une seule résolution, un seul pubspec.lock, un seul `flutter pub get`
+# pour tout l'arbre. Les paquets ci-dessous se référencent entre eux sans `path:` ni `melos bootstrap`.
+workspace:
+  - apps/tictactoe
+  - packages/features/game/domain
+  - packages/features/game/presentation
+  - packages/features/scoreboard/data
+  - packages/features/scoreboard/domain
+  - packages/features/scoreboard/presentation
+
+dev_dependencies:
+  very_good_analysis: ^6.0.0

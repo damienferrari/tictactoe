@@ -1,0 +1,30 @@
+include: package:very_good_analysis/analysis_options.6.0.0.yaml
+
+analyzer:
+  language:
+    strict-casts: true
+    strict-inference: true
+    strict-raw-types: true
+  errors:
+    # Le codegen est vérifié en CI ; un `part` manquant doit rester une erreur bloquante.
+    missing_required_param: error
+    missing_return: error
+  exclude:
+    - "**/*.g.dart"
+    - "**/*.freezed.dart"
+
+linter:
+  rules:
+    # Les entités de domaine sont des objets de valeur : l'ordre alphabétique des champs est
+    # la convention du dépôt, et il rend les diffs lisibles.
+    sort_constructors_first: true
+    prefer_const_constructors: true
+    prefer_const_literals_to_create_immutables: true
+    # Documenter chaque symbole public serait du bruit sur un domaine de cette taille ;
+    # les commentaires servent à expliquer un *pourquoi* non évident.
+    public_member_api_docs: false
+    lines_longer_than_80_chars: false
+    # Repository and strategy ports are named roles with constructor-injected
+    # dependencies. A typedef cannot carry those, so a one-member interface is the right
+    # shape here even when the lint suggests collapsing it.
+    one_member_abstracts: false
