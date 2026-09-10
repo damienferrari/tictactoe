@@ -1,0 +1,9 @@
+targets:
+  $default:
+    builders:
+      freezed:
+        generate_for:
+          - "**/*.br.dart"
+      riverpod_generator:
+        generate_for:
+          - "**/*.br.dart"
