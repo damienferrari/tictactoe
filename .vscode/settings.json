@@ -1,0 +1,22 @@
+{
+  // The repository root is a pub workspace, not a Flutter app. Without this the Dart
+  // extension does not look deep enough to find apps/tictactoe, and the device selector
+  // never appears. Read at window startup: reload the window after changing it.
+  "dart.projectSearchDepth": 5,
+  "dart.lineLength": 100,
+  // Neutralises the ruler from the user's own "[dart]" settings, which sits at 80 while
+  // this repository formats at 100. Answered in the same language-scoped shape, because a
+  // top-level editor.rulers would not take precedence over a "[dart]" one.
+  "[dart]": {
+    "editor.rulers": []
+  },
+  "editor.formatOnSave": true,
+  "dart.runPubGetOnPubspecChanges": "prompt",
+  "search.exclude": {
+    "**/*.g.dart": true,
+    "**/*.freezed.dart": true
+  },
+  "files.exclude": {
+    "**/.dart_tool": true
+  }
+}

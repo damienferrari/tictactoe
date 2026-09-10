@@ -1,0 +1,25 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "tictactoe",
+      "request": "launch",
+      "type": "dart",
+      "program": "${workspaceFolder}/apps/tictactoe/lib/main.dart"
+    },
+    {
+      "name": "tictactoe (profile)",
+      "request": "launch",
+      "type": "dart",
+      "flutterMode": "profile",
+      "program": "${workspaceFolder}/apps/tictactoe/lib/main.dart"
+    },
+    {
+      "name": "tictactoe (release)",
+      "request": "launch",
+      "type": "dart",
+      "flutterMode": "release",
+      "program": "${workspaceFolder}/apps/tictactoe/lib/main.dart"
+    }
+  ]
+}

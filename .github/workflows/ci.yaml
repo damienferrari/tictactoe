@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.4
+          channel: stable
+          cache: true
+
+      - run: ./tool/check.sh
+
+  features-are-independent:
+    # The repository's central claim, executed: each feature is analysed and tested with
+    # every other feature and the app physically removed from the tree.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.4
+          channel: stable
+          cache: true
+
+      - run: ./tool/prove_independence.sh
+
+  codegen-is-committed:
+    # Generated files are committed so the repository builds on clone. This job makes
+    # sure they were regenerated after the last change to their sources.
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version: 3.44.4
+          channel: stable
+          cache: true
+
+      - run: flutter pub get
+
+      - name: Regenerate
+        run: |
+          for package in \
+            packages/features/game/domain \
+            packages/features/game/presentation \
+            packages/features/scoreboard/domain \
+            packages/features/scoreboard/data \
+            packages/features/scoreboard/presentation
+          do
+            ( cd "$package" && dart run build_runner build )
+          done
+
+      - name: Fail if anything changed
+        run: |
+          if ! git diff --quiet; then
+            echo "Generated files are stale. Run build_runner and commit the result."
+            git diff --stat
+            exit 1
+          fi
