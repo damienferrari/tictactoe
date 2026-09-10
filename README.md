@@ -1,4 +1,7 @@
 # Tic-tac-toe
+<img height="500" alt="Screenshot_1789031275" src="https://github.com/user-attachments/assets/c45bad48-0daf-45b8-a105-ddb28c6eb054" />
+<img height="500" alt="Simulator Screenshot - iPhone 17 - 2026-09-10 at 11 08 07" src="https://github.com/user-attachments/assets/390d1618-dabd-4bac-9c41-b5183eb380dc" />
+
 
 A local game against a computer opponent.
 
