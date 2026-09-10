@@ -99,16 +99,16 @@ final class OnGameFinishedProvider
 
 String _$onGameFinishedHash() => r'd6d8a429661aa367cf62fe6b78891a769d392d27';
 
-/// Proxies the in-package default. Tests bind `Duration.zero` to stay instant.
+/// Returns the in-package default, so binding it is optional — tests bind `Duration.zero`.
 
 @ProviderFor(cpuMoveDelay)
 final cpuMoveDelayProvider = CpuMoveDelayProvider._();
 
-/// Proxies the in-package default. Tests bind `Duration.zero` to stay instant.
+/// Returns the in-package default, so binding it is optional — tests bind `Duration.zero`.
 
 final class CpuMoveDelayProvider extends $FunctionalProvider<Duration, Duration, Duration>
     with $Provider<Duration> {
-  /// Proxies the in-package default. Tests bind `Duration.zero` to stay instant.
+  /// Returns the in-package default, so binding it is optional — tests bind `Duration.zero`.
   CpuMoveDelayProvider._()
     : super(
         from: null,
