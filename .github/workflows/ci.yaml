@@ -55,11 +55,15 @@ jobs:
             packages/features/game/domain \
             packages/features/game/presentation \
             packages/features/scoreboard/domain \
-            packages/features/scoreboard/data \
-            packages/features/scoreboard/presentation
+            packages/features/scoreboard/data
           do
             ( cd "$package" && dart run build_runner build )
           done
+
+      # The generators emit at 80 columns; the repository is formatted at 100. Without
+      # this the diff below would flag every generated file on every run.
+      - name: Format
+        run: dart format --line-length 100 .
 
       - name: Fail if anything changed
         run: |
